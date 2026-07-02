@@ -1,25 +1,42 @@
-// Neon serverless Postgres client (the successor to @vercel/postgres).
+// Standard node-postgres (pg) connection pool.
 //
-// The client is created lazily so that importing this module during
-// `next build` never touches the connection string — queries only run at
-// request time in the API routes.
+// Connects via DATABASE_URL (Render Postgres external URL). The pool is
+// created lazily and cached in module scope so warm serverless invocations
+// reuse it; importing this module during `next build` never opens a socket.
 
-import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { Pool, type QueryResult, type QueryResultRow } from "pg";
 import type { Expense } from "./types";
 import type { CategoryKey } from "./categories";
 
-let client: NeonQueryFunction<false, false> | null = null;
+let pool: Pool | null = null;
 
-export function getSql(): NeonQueryFunction<false, false> {
-  if (client) return client;
-  const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+function sslConfig(connectionString: string): false | { rejectUnauthorized: boolean } {
+  // Local databases don't use SSL; managed hosts like Render require it.
+  if (/sslmode=disable/.test(connectionString)) return false;
+  if (/@(localhost|127\.0\.0\.1)[:/]/.test(connectionString)) return false;
+  return { rejectUnauthorized: false };
+}
+
+export function getPool(): Pool {
+  if (pool) return pool;
+  const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
   if (!connectionString) {
-    throw new Error(
-      "POSTGRES_URL (or DATABASE_URL) is not set — cannot reach the database."
-    );
+    throw new Error("DATABASE_URL is not set — cannot reach the database.");
   }
-  client = neon(connectionString);
-  return client;
+  pool = new Pool({
+    connectionString,
+    ssl: sslConfig(connectionString),
+    max: 3,
+    connectionTimeoutMillis: 10_000,
+  });
+  return pool;
+}
+
+export function query<T extends QueryResultRow = QueryResultRow>(
+  text: string,
+  params?: unknown[]
+): Promise<QueryResult<T>> {
+  return getPool().query<T>(text, params as never[]);
 }
 
 /** Columns to select so amount/date come back in a predictable shape. */
@@ -32,7 +49,7 @@ export const EXPENSE_COLUMNS = `
   created_at
 `;
 
-export function mapExpenseRow(row: Record<string, unknown>): Expense {
+export function mapExpenseRow(row: QueryResultRow): Expense {
   const created = row.created_at;
   return {
     id: Number(row.id),

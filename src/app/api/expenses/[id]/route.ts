@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSql, mapExpenseRow } from "@/lib/db";
+import { query, mapExpenseRow } from "@/lib/db";
 import { isCategoryKey } from "@/lib/categories";
 
 export const dynamic = "force-dynamic";
@@ -61,19 +61,17 @@ export async function PATCH(
     typeof note === "string" && note.trim() !== "" ? note.trim() : null;
 
   try {
-    const sql = getSql();
-    const rows = await sql`
-      UPDATE expenses SET
-        category   = COALESCE(${categoryVal}, category),
-        amount     = COALESCE(${amountVal}, amount),
-        entry_date = COALESCE(${dateVal}::date, entry_date),
-        note       = CASE WHEN ${noteProvided}::boolean THEN ${noteVal} ELSE note END
-      WHERE id = ${id}
-      RETURNING
-        id, category, amount,
-        to_char(entry_date, 'YYYY-MM-DD') AS entry_date,
-        note, created_at
-    `;
+    const { rows } = await query(
+      `UPDATE expenses SET
+         category   = COALESCE($2, category),
+         amount     = COALESCE($3, amount),
+         entry_date = COALESCE($4::date, entry_date),
+         note       = CASE WHEN $5::boolean THEN $6 ELSE note END
+       WHERE id = $1
+       RETURNING id, category, amount,
+                 to_char(entry_date, 'YYYY-MM-DD') AS entry_date, note, created_at`,
+      [id, categoryVal, amountVal, dateVal, noteProvided, noteVal]
+    );
     if (rows.length === 0) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
@@ -95,9 +93,8 @@ export async function DELETE(
   }
 
   try {
-    const sql = getSql();
-    const rows = await sql`DELETE FROM expenses WHERE id = ${id} RETURNING id`;
-    if (rows.length === 0) {
+    const { rowCount } = await query(`DELETE FROM expenses WHERE id = $1`, [id]);
+    if (!rowCount) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     return NextResponse.json({ ok: true });

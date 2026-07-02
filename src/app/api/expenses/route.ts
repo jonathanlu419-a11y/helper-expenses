@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
-import { getSql, EXPENSE_COLUMNS, mapExpenseRow } from "@/lib/db";
+import { query, EXPENSE_COLUMNS, mapExpenseRow } from "@/lib/db";
 import { isCategoryKey } from "@/lib/categories";
+import { todayISO } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
 // GET /api/expenses — all entries, newest first.
 export async function GET() {
   try {
-    const sql = getSql();
-    const rows = await sql.query(
+    const { rows } = await query(
       `SELECT ${EXPENSE_COLUMNS} FROM expenses ORDER BY entry_date DESC, created_at DESC`
     );
     return NextResponse.json(rows.map(mapExpenseRow));
@@ -38,28 +38,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Amount must be a positive number" }, { status: 400 });
   }
 
+  // Default to Toronto "today" (not the DB/server timezone) when omitted.
   const dateStr =
     typeof entry_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(entry_date)
       ? entry_date
-      : null;
+      : todayISO();
 
   const noteStr = typeof note === "string" && note.trim() !== "" ? note.trim() : null;
 
   try {
-    const sql = getSql();
-    const rows = await sql`
-      INSERT INTO expenses (category, amount, entry_date, note)
-      VALUES (
-        ${category},
-        ${amt},
-        COALESCE(${dateStr}::date, CURRENT_DATE),
-        ${noteStr}
-      )
-      RETURNING
-        id, category, amount,
-        to_char(entry_date, 'YYYY-MM-DD') AS entry_date,
-        note, created_at
-    `;
+    const { rows } = await query(
+      `INSERT INTO expenses (category, amount, entry_date, note)
+       VALUES ($1, $2, $3::date, $4)
+       RETURNING id, category, amount,
+                 to_char(entry_date, 'YYYY-MM-DD') AS entry_date, note, created_at`,
+      [category, amt, dateStr, noteStr]
+    );
     return NextResponse.json(mapExpenseRow(rows[0]), { status: 201 });
   } catch (err) {
     console.error("POST /api/expenses failed:", err);

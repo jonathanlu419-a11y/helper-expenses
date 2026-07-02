@@ -1,55 +1,27 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { CATEGORY_MAP } from "@/lib/categories";
 import { formatMoney, formatDateShort } from "@/lib/format";
 import type { Expense, ExpenseInput } from "@/lib/types";
-import {
-  fetchExpenses,
-  createExpense,
-  updateExpense,
-  deleteExpense,
-} from "@/lib/client";
+import { useExpenses } from "@/lib/useExpenses";
 import ExpenseSheet from "@/components/ExpenseSheet";
 import Toast, { type ToastState } from "@/components/Toast";
 
 export default function WorkerPage() {
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const { expenses, loading, error, reload, add, edit, remove } = useExpenses();
   const [sheet, setSheet] = useState<
     { mode: "add" } | { mode: "edit"; expense: Expense } | null
   >(null);
   const [toast, setToast] = useState<ToastState | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      setLoadError(null);
-      setExpenses(await fetchExpenses());
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : "Gagal memuat data.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
   async function handleSubmit(input: ExpenseInput) {
     if (sheet?.mode === "edit") {
-      const updated = await updateExpense(sheet.expense.id, input);
-      setExpenses((prev) =>
-        prev
-          .map((e) => (e.id === updated.id ? updated : e))
-          .sort(sortByDateDesc)
-      );
+      await edit(sheet.expense.id, input);
       setToast({ message: "Perubahan tersimpan!", kind: "success" });
     } else {
-      const created = await createExpense(input);
-      setExpenses((prev) => [created, ...prev].sort(sortByDateDesc));
+      await add(input);
       setToast({ message: "Tersimpan!", kind: "success" });
     }
     setSheet(null);
@@ -58,8 +30,7 @@ export default function WorkerPage() {
   async function handleDelete(exp: Expense) {
     if (!window.confirm("Yakin mau hapus catatan ini?")) return;
     try {
-      await deleteExpense(exp.id);
-      setExpenses((prev) => prev.filter((e) => e.id !== exp.id));
+      await remove(exp.id);
       setToast({ message: "Dihapus.", kind: "success" });
     } catch (e) {
       setToast({
@@ -86,11 +57,11 @@ export default function WorkerPage() {
       <section className="px-4 pt-4">
         {loading ? (
           <p className="py-16 text-center text-sm text-gray-400">Memuat…</p>
-        ) : loadError ? (
+        ) : error ? (
           <div className="py-16 text-center">
-            <p className="text-sm text-red-600">{loadError}</p>
+            <p className="text-sm text-red-600">{error}</p>
             <button
-              onClick={load}
+              onClick={reload}
               className="mt-3 rounded-full bg-gray-800 px-4 py-2 text-sm text-white"
             >
               Coba lagi
@@ -137,6 +108,11 @@ export default function WorkerPage() {
                       >
                         <span className="mr-1">{cat?.emoji}</span>
                         <span className="text-gray-700">{cat?.labelId}</span>
+                        {exp.note && (
+                          <span className="mt-0.5 block text-xs text-gray-400">
+                            {exp.note}
+                          </span>
+                        )}
                       </td>
                       <td
                         className="cursor-pointer px-3 py-3 text-right font-semibold"
@@ -174,6 +150,7 @@ export default function WorkerPage() {
       {sheet && (
         <ExpenseSheet
           mode={sheet.mode}
+          lang="id"
           initial={sheet.mode === "edit" ? sheet.expense : undefined}
           onClose={() => setSheet(null)}
           onSubmit={handleSubmit}
@@ -183,11 +160,4 @@ export default function WorkerPage() {
       <Toast toast={toast} onDismiss={() => setToast(null)} />
     </main>
   );
-}
-
-function sortByDateDesc(a: Expense, b: Expense): number {
-  if (a.entry_date !== b.entry_date) {
-    return a.entry_date < b.entry_date ? 1 : -1;
-  }
-  return b.created_at < a.created_at ? -1 : 1;
 }

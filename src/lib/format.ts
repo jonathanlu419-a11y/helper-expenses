@@ -1,4 +1,5 @@
-// Display helpers shared by both pages.
+// Pure display helpers shared by both pages.
+// (Date *math* lives in time.ts; this file only renders values.)
 
 /** Format a number as "$1,234.50". */
 export function formatMoney(amount: number): string {
@@ -11,23 +12,14 @@ export function formatMoney(amount: number): string {
   );
 }
 
-/** Today's local date as "YYYY-MM-DD" (for date input defaults). */
-export function todayISO(): string {
-  const d = new Date();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${m}-${day}`;
-}
-
-/** Parse a "YYYY-MM-DD" string into a local-midnight Date (TZ-safe). */
-export function parseISODate(iso: string): Date {
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-/** e.g. "2 Jul 2026" — used on the worker's Indonesian table too (month names are neutral). */
+/**
+ * Render a "YYYY-MM-DD" string as e.g. "2 Jul 2026".
+ * Parsed at local noon so the displayed day never shifts. This is display
+ * only — period boundaries are computed in time.ts (Toronto-anchored).
+ */
 export function formatDateShort(iso: string, locale = "en-GB"): string {
-  return parseISODate(iso).toLocaleDateString(locale, {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d, 12).toLocaleDateString(locale, {
     day: "numeric",
     month: "short",
     year: "numeric",

@@ -1,11 +1,13 @@
-// Applies db/schema.sql to the database in POSTGRES_URL / DATABASE_URL.
+// Applies db/schema.sql to the database in DATABASE_URL (Render Postgres).
 // Usage: npm run db:setup
 //
 // Loads env from .env.local then .env (without overriding real env vars),
 // so it works both locally and in CI without extra dependencies.
 
 import { readFileSync } from "node:fs";
-import { neon } from "@neondatabase/serverless";
+import pg from "pg";
+
+const { Client } = pg;
 
 function loadEnvFile(name) {
   try {
@@ -25,15 +27,19 @@ function loadEnvFile(name) {
 loadEnvFile(".env.local");
 loadEnvFile(".env");
 
-const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 if (!connectionString) {
   console.error(
-    "✗ POSTGRES_URL is not set. Copy .env.example to .env.local and fill it in."
+    "✗ DATABASE_URL is not set. Copy .env.example to .env.local and fill it in."
   );
   process.exit(1);
 }
 
-const sql = neon(connectionString);
+function sslConfig(cs) {
+  if (/sslmode=disable/.test(cs)) return false;
+  if (/@(localhost|127\.0\.0\.1)[:/]/.test(cs)) return false;
+  return { rejectUnauthorized: false };
+}
 
 const schema = readFileSync(new URL("../db/schema.sql", import.meta.url), "utf8");
 const statements = schema
@@ -41,16 +47,20 @@ const statements = schema
   .map((s) => s.trim())
   .filter((s) => s.length > 0 && !s.startsWith("--"));
 
+const client = new Client({ connectionString, ssl: sslConfig(connectionString) });
+
 try {
+  await client.connect();
   for (const stmt of statements) {
-    await sql.query(stmt);
+    await client.query(stmt);
     const firstMeaningful =
       stmt.split("\n").find((l) => l.trim() && !l.trim().startsWith("--")) ?? "";
     console.log("✓", firstMeaningful.trim().slice(0, 70));
   }
   console.log("\nDatabase schema applied successfully.");
-  process.exit(0);
 } catch (err) {
   console.error("✗ Failed to apply schema:", err.message);
-  process.exit(1);
+  process.exitCode = 1;
+} finally {
+  await client.end();
 }

@@ -1,48 +1,34 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { CATEGORIES, CATEGORY_MAP } from "@/lib/categories";
-import { formatMoney, formatDateShort, parseISODate } from "@/lib/format";
-import type { Expense } from "@/lib/types";
-import { fetchExpenses } from "@/lib/client";
-
-type Period = "weekly" | "monthly";
+import { formatMoney, formatDateShort } from "@/lib/format";
+import type { Expense, ExpenseInput } from "@/lib/types";
+import { useExpenses } from "@/lib/useExpenses";
+import { getPeriodRange, isWithin, type Period } from "@/lib/time";
+import ExpenseSheet from "@/components/ExpenseSheet";
+import Toast, { type ToastState } from "@/components/Toast";
 
 export default function MumPage() {
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { expenses, loading, error, add, edit, remove } = useExpenses();
   const [period, setPeriod] = useState<Period>("weekly");
   // 0 = current period, -1 = previous, +1 = next …
   const [offset, setOffset] = useState(0);
+  const [sheet, setSheet] = useState<
+    { mode: "add" } | { mode: "edit"; expense: Expense } | null
+  >(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        setExpenses(await fetchExpenses());
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load data.");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  // Reset navigation when switching period type.
   function changePeriod(p: Period) {
     setPeriod(p);
     setOffset(0);
   }
 
-  const range = useMemo(() => getRange(period, offset), [period, offset]);
+  const range = useMemo(() => getPeriodRange(period, offset), [period, offset]);
 
   const inRange = useMemo(
-    () =>
-      expenses.filter((e) => {
-        const d = parseISODate(e.entry_date);
-        return d >= range.start && d < range.end;
-      }),
+    () => expenses.filter((e) => isWithin(e.entry_date, range)),
     [expenses, range]
   );
 
@@ -63,8 +49,32 @@ export default function MumPage() {
     [totals]
   );
 
+  async function handleSubmit(input: ExpenseInput) {
+    if (sheet?.mode === "edit") {
+      await edit(sheet.expense.id, input);
+      setToast({ message: "Changes saved.", kind: "success" });
+    } else {
+      await add(input);
+      setToast({ message: "Saved.", kind: "success" });
+    }
+    setSheet(null);
+  }
+
+  async function handleDelete(exp: Expense) {
+    if (!window.confirm("Delete this entry?")) return;
+    try {
+      await remove(exp.id);
+      setToast({ message: "Deleted.", kind: "success" });
+    } catch (e) {
+      setToast({
+        message: e instanceof Error ? e.message : "Failed to delete.",
+        kind: "error",
+      });
+    }
+  }
+
   return (
-    <main className="mx-auto min-h-screen max-w-2xl px-4 pb-16">
+    <main className="mx-auto min-h-screen max-w-2xl px-4 pb-28">
       <header className="sticky top-0 z-10 -mx-4 mb-4 border-b border-gray-100 bg-gray-50/90 px-4 py-4 backdrop-blur">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold">Spending Dashboard</h1>
@@ -144,10 +154,7 @@ export default function MumPage() {
               const val = totals.get(c.key) ?? 0;
               const pct = (val / maxCat) * 100;
               return (
-                <div
-                  key={c.key}
-                  className="rounded-2xl bg-white p-4 shadow-sm"
-                >
+                <div key={c.key} className="rounded-2xl bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-xl">{c.emoji}</span>
@@ -155,9 +162,7 @@ export default function MumPage() {
                         {c.labelEn}
                       </span>
                     </div>
-                    <span className="text-sm font-bold">
-                      {formatMoney(val)}
-                    </span>
+                    <span className="text-sm font-bold">{formatMoney(val)}</span>
                   </div>
                   <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-100">
                     <div
@@ -170,87 +175,96 @@ export default function MumPage() {
             })}
           </div>
 
-          {/* Raw entries (read-only) */}
-          <details className="rounded-2xl bg-white p-4 shadow-sm">
-            <summary className="cursor-pointer text-sm font-semibold text-gray-700">
-              All entries this period ({inRange.length})
-            </summary>
+          {/* Entries — editable + deletable */}
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-700">
+                Entries this period
+              </h2>
+              <span className="text-xs text-gray-400">{inRange.length}</span>
+            </div>
             {inRange.length === 0 ? (
-              <p className="mt-3 text-sm text-gray-400">No entries.</p>
+              <p className="py-6 text-center text-sm text-gray-400">
+                No entries in this period.
+              </p>
             ) : (
-              <table className="mt-3 w-full text-sm">
+              <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs text-gray-400">
                     <th className="py-1 font-medium">Date</th>
                     <th className="py-1 font-medium">Category</th>
                     <th className="py-1 text-right font-medium">Amount</th>
+                    <th className="py-1" />
                   </tr>
                 </thead>
                 <tbody>
-                  {inRange.map((e) => (
-                    <tr key={e.id} className="border-t border-gray-50">
-                      <td className="py-2 text-gray-500">
-                        {formatDateShort(e.entry_date)}
-                      </td>
-                      <td className="py-2 text-gray-700">
-                        <span className="mr-1">
-                          {CATEGORY_MAP[e.category]?.emoji}
-                        </span>
-                        {CATEGORY_MAP[e.category]?.labelEn}
-                      </td>
-                      <td className="py-2 text-right font-medium">
-                        {formatMoney(e.amount)}
-                      </td>
-                    </tr>
-                  ))}
+                  {inRange.map((e) => {
+                    const cat = CATEGORY_MAP[e.category];
+                    return (
+                      <tr key={e.id} className="border-t border-gray-50">
+                        <td
+                          className="cursor-pointer py-2 text-gray-500"
+                          onClick={() => setSheet({ mode: "edit", expense: e })}
+                        >
+                          {formatDateShort(e.entry_date)}
+                        </td>
+                        <td
+                          className="cursor-pointer py-2 text-gray-700"
+                          onClick={() => setSheet({ mode: "edit", expense: e })}
+                        >
+                          <span className="mr-1">{cat?.emoji}</span>
+                          {cat?.labelEn}
+                          {e.note && (
+                            <span className="mt-0.5 block text-xs text-gray-400">
+                              {e.note}
+                            </span>
+                          )}
+                        </td>
+                        <td
+                          className="cursor-pointer py-2 text-right font-medium"
+                          onClick={() => setSheet({ mode: "edit", expense: e })}
+                        >
+                          {formatMoney(e.amount)}
+                        </td>
+                        <td className="py-2 pl-1 text-right">
+                          <button
+                            onClick={() => handleDelete(e)}
+                            className="rounded-full px-2 py-1 text-gray-300 hover:text-red-500"
+                            aria-label="Delete"
+                          >
+                            🗑️
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
-          </details>
+          </div>
         </>
       )}
+
+      {/* Floating Quick-Add button (English) */}
+      <button
+        onClick={() => setSheet({ mode: "add" })}
+        className="fixed bottom-6 right-6 z-30 flex h-16 w-16 items-center justify-center rounded-full bg-green-600 text-4xl font-light text-white shadow-lg transition active:scale-90"
+        aria-label="Add expense"
+      >
+        +
+      </button>
+
+      {sheet && (
+        <ExpenseSheet
+          mode={sheet.mode}
+          lang="en"
+          initial={sheet.mode === "edit" ? sheet.expense : undefined}
+          onClose={() => setSheet(null)}
+          onSubmit={handleSubmit}
+        />
+      )}
+
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
     </main>
   );
-}
-
-// ── Period maths ──────────────────────────────────────────────
-// Weekly = Monday–Sunday. Monthly = calendar month.
-// `end` is exclusive (start of the next period).
-
-function getRange(
-  period: Period,
-  offset: number
-): { start: Date; end: Date; label: string } {
-  const now = new Date();
-
-  if (period === "weekly") {
-    const start = startOfWeek(now);
-    start.setDate(start.getDate() + offset * 7);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 7);
-    const lastDay = new Date(end);
-    lastDay.setDate(lastDay.getDate() - 1);
-    const label = `${fmt(start)} – ${fmt(lastDay)}`;
-    return { start, end, label };
-  }
-
-  // monthly
-  const start = new Date(now.getFullYear(), now.getMonth() + offset, 1);
-  const end = new Date(now.getFullYear(), now.getMonth() + offset + 1, 1);
-  const label = start.toLocaleDateString("en-GB", {
-    month: "long",
-    year: "numeric",
-  });
-  return { start, end, label };
-}
-
-function startOfWeek(d: Date): Date {
-  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const day = (x.getDay() + 6) % 7; // Monday = 0
-  x.setDate(x.getDate() - day);
-  return x;
-}
-
-function fmt(d: Date): string {
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
