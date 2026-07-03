@@ -2,7 +2,7 @@
 
 A tiny two-page household spending tracker.
 
-- **`/worker`** — Bahasa Indonesia quick-entry screen for the domestic helper. A floating **+** button opens a 2-step sheet (pick category → enter amount), and every entry is listed in a table that can be edited or deleted.
+- **`/worker`** — Bahasa Indonesia quick-entry screen for the domestic helper. A floating **+** button opens a 2-step sheet (pick category → enter amount), and every entry is listed in a table that can be edited or deleted. The Quick Add sheet also has a **📷 Ambil Foto** option: the helper photographs a receipt or a price-tagged item, and **Claude vision** prefills the category and amount for her to review (never auto-saved). If the price can't be read confidently (unit price only, blurry, missing), the amount is left blank for manual entry.
 - **`/mum`** — English dashboard for the employer. Toggle **Weekly / Monthly**, step through periods, and see per-category totals (with bars), a grand total, and the entries. Mum can also add (its own English **+** button), edit, and delete entries.
 - **`/mum/calendar`** — month-view calendar (linked from the dashboard sub-nav). Each day cell shows that day's totals rolled up into **3 big categories** — Food / Transport / Household — with prev/next month navigation and a tap-to-expand day detail. The roll-up is view-only; the underlying 7-category data is unchanged.
 
@@ -71,6 +71,7 @@ Only one is required:
 | Variable | Required | Notes |
 |---|---|---|
 | `DATABASE_URL` | ✅ | Neon **pooled** connection string. Used by the app (`pg`) and by `npm run db:setup`. Note: the Vercel↔Neon integration also injects prefixed vars (e.g. `helper_expenses_tracking_DATABASE_URL`), but the app reads the plain `DATABASE_URL` — set that explicitly. |
+| `ANTHROPIC_API_KEY` | ⬜ optional | Enables the **📷 camera Quick Add** on `/worker` (Claude vision). If unset, the camera button is hidden and manual entry still works. Server-side only — never exposed to the browser. |
 
 ---
 
@@ -124,3 +125,4 @@ Single `expenses` table — see [`db/schema.sql`](db/schema.sql):
 - **No auth** — both routes are public (MVP). If you later want to deter random URL hits, add a lightweight PIN gate.
 - **No currency logic** — amounts are plain numbers shown with a `$` prefix.
 - The `note` field exists in the schema/API but has no input in the entry UI for the MVP; if a note is present it's shown under the category.
+- **Camera Quick Add (vision):** uses `claude-opus-4-8` via `@anthropic-ai/sdk` in the `/api/vision` route. The photo is **downscaled in the browser, sent for one-shot extraction, and never stored** — not in the database, not in any file/blob storage — to keep infra simple and avoid privacy/storage concerns. The model is prompted to return `{amount, category, confidence_note}` as JSON and is instructed to return `amount: null` rather than guess when the price isn't clearly readable; the route parses defensively and falls back to a blank form on any failure.

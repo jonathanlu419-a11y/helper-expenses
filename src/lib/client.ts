@@ -7,6 +7,7 @@ import type {
   CashInput,
   Settings,
 } from "./types";
+import type { CategoryKey } from "./categories";
 
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -92,4 +93,42 @@ export async function updateSettings(input: Partial<Settings>): Promise<Settings
 // ── Destructive reset ─────────────────────────────────────────
 export async function resetAllData(): Promise<void> {
   await handle<{ ok: true }>(await fetch("/api/reset", { method: "POST" }));
+}
+
+// ── Vision (camera Quick Add) ─────────────────────────────────
+export interface VisionResult {
+  amount: number | null;
+  category: CategoryKey | null;
+  note: string | null;
+  unavailable?: boolean;
+}
+
+/** Whether the camera Quick Add is configured (ANTHROPIC_API_KEY present). */
+export async function visionEnabled(): Promise<boolean> {
+  try {
+    const res = await fetch("/api/vision", { cache: "no-store" });
+    if (!res.ok) return false;
+    const body = (await res.json()) as { enabled?: boolean };
+    return Boolean(body.enabled);
+  } catch {
+    return false;
+  }
+}
+
+/** Send a base64 photo for extraction. Never throws — returns blanks on failure. */
+export async function analyzePhoto(
+  image: string,
+  media_type: string
+): Promise<VisionResult> {
+  try {
+    const res = await fetch("/api/vision", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image, media_type }),
+    });
+    if (!res.ok) return { amount: null, category: null, note: null, unavailable: true };
+    return (await res.json()) as VisionResult;
+  } catch {
+    return { amount: null, category: null, note: null, unavailable: true };
+  }
 }

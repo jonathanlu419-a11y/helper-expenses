@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CATEGORIES, type CategoryKey } from "@/lib/categories";
 import { todayISO } from "@/lib/time";
 import type { Expense, ExpenseInput } from "@/lib/types";
+import { resizeImageFile } from "@/lib/image";
+import { analyzePhoto, visionEnabled } from "@/lib/client";
 
 export type Lang = "id" | "en";
 
@@ -11,6 +13,9 @@ export type Lang = "id" | "en";
 // Copy switches on `lang`: "id" (Bahasa Indonesia, worker) or "en" (Mum).
 //
 // - "add" mode is a 2-step flow: pick a category, then enter the amount.
+//   In add mode it also offers a camera option ("Ambil Foto") that uses Claude
+//   vision to PREFILL the category/amount from a receipt or price tag — the
+//   helper always reviews and confirms before saving (never auto-submitted).
 // - "edit" mode shows everything on one screen, pre-filled.
 
 const STRINGS: Record<Lang, Record<string, string>> = {
@@ -27,6 +32,12 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     errPickCategory: "Pilih kategori dulu.",
     errAmount: "Masukkan jumlah yang benar.",
     errSave: "Gagal menyimpan.",
+    takePhoto: "📷 Ambil Foto",
+    reading: "Membaca foto…",
+    orManual: "atau pilih sendiri:",
+    autoFilled: "🤖 Terisi otomatis — mohon periksa",
+    photoNeedCategory: "Jumlah terbaca. Sekarang pilih kategori.",
+    photoNoRead: "Foto tidak terbaca otomatis. Isi manual ya.",
   },
   en: {
     addTitle: "Add Expense",
@@ -41,6 +52,12 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     errPickCategory: "Please pick a category first.",
     errAmount: "Enter a valid amount.",
     errSave: "Failed to save.",
+    takePhoto: "📷 Take Photo",
+    reading: "Reading photo…",
+    orManual: "or choose manually:",
+    autoFilled: "🤖 Auto-filled — please check",
+    photoNeedCategory: "Amount read. Now pick a category.",
+    photoNoRead: "Couldn't read the photo. Enter it manually.",
   },
 };
 
@@ -74,9 +91,67 @@ export default function ExpenseSheet({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Camera Quick Add state
+  const [cameraOn, setCameraOn] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [autoFilled, setAutoFilled] = useState(false);
+  const [photoMsg, setPhotoMsg] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Only offer the camera when adding and the vision API is configured.
+  useEffect(() => {
+    if (mode !== "add") return;
+    let alive = true;
+    visionEnabled().then((ok) => {
+      if (alive) setCameraOn(ok);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [mode]);
+
   function pickCategory(key: CategoryKey) {
     setCategory(key);
     setStep(2);
+  }
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the same file
+    if (!file) return;
+
+    setError(null);
+    setPhotoMsg(null);
+    setAnalyzing(true);
+    try {
+      const { data, media_type } = await resizeImageFile(file);
+      const r = await analyzePhoto(data, media_type);
+
+      let filled = false;
+      if (r.category) {
+        setCategory(r.category);
+        filled = true;
+      }
+      if (r.amount != null) {
+        setAmount(String(r.amount));
+        filled = true;
+      }
+      setAutoFilled(filled);
+
+      if (r.category) {
+        // Category known → go straight to the amount screen for review.
+        setStep(2);
+      } else if (r.amount != null) {
+        // Amount read but category unknown → let her pick a category first.
+        setPhotoMsg(t.photoNeedCategory);
+      } else {
+        setPhotoMsg(t.photoNoRead);
+      }
+    } catch {
+      setPhotoMsg(t.photoNoRead);
+    } finally {
+      setAnalyzing(false);
+    }
   }
 
   async function handleSave() {
@@ -126,9 +201,35 @@ export default function ExpenseSheet({
           </button>
         </div>
 
-        {/* Step 1: choose a category */}
+        {/* hidden camera/file input (photo taken or uploaded) */}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={handleFile}
+        />
+
+        {/* Step 1: choose a category (with optional camera prefill) */}
         {step === 1 && (
           <div>
+            {mode === "add" && cameraOn && (
+              <div className="mb-4">
+                <button
+                  onClick={() => fileRef.current?.click()}
+                  disabled={analyzing}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-green-600 py-4 text-base font-bold text-white shadow-sm transition active:scale-[0.98] disabled:opacity-60"
+                >
+                  {analyzing ? t.reading : t.takePhoto}
+                </button>
+                {photoMsg && (
+                  <p className="mt-2 text-sm font-medium text-amber-700">{photoMsg}</p>
+                )}
+                <p className="mt-3 text-center text-xs text-gray-400">{t.orManual}</p>
+              </div>
+            )}
+
             <p className="mb-3 text-sm text-gray-500">{t.pickCategory}</p>
             <div className="grid grid-cols-2 gap-3">
               {CATEGORIES.map((c) => (
@@ -167,6 +268,12 @@ export default function ExpenseSheet({
               </span>
               <span className="text-gray-400">›</span>
             </button>
+
+            {autoFilled && (
+              <div className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+                {t.autoFilled}
+              </div>
+            )}
 
             <label className="mb-1 block text-sm font-medium text-gray-600">
               {t.amount}
