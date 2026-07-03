@@ -7,8 +7,9 @@ import type { Expense, ExpenseInput } from "@/lib/types";
 import { useExpenses } from "@/lib/useExpenses";
 import ExpenseSheet from "@/components/ExpenseSheet";
 import Toast, { type ToastState } from "@/components/Toast";
+import MumTabs from "@/components/MumTabs";
 
-export default function WorkerPage() {
+export default function MumEntriesPage() {
   const { expenses, loading, error, reload, add, edit, remove } = useExpenses();
   const [sheet, setSheet] = useState<
     { mode: "add" } | { mode: "edit"; expense: Expense } | null
@@ -18,37 +19,37 @@ export default function WorkerPage() {
   async function handleSubmit(input: ExpenseInput) {
     if (sheet?.mode === "edit") {
       await edit(sheet.expense.id, input);
-      setToast({ message: "Perubahan tersimpan!", kind: "success" });
+      setToast({ message: "Changes saved.", kind: "success" });
     } else {
       await add(input);
-      setToast({ message: "Tersimpan!", kind: "success" });
+      setToast({ message: "Saved.", kind: "success" });
     }
     setSheet(null);
   }
 
   async function handleDelete(exp: Expense) {
-    if (!window.confirm("Yakin mau hapus catatan ini?")) return;
+    if (!window.confirm("Delete this entry?")) return;
     try {
       await remove(exp.id);
-      setToast({ message: "Dihapus.", kind: "success" });
+      setToast({ message: "Deleted.", kind: "success" });
     } catch (e) {
       setToast({
-        message: e instanceof Error ? e.message : "Gagal menghapus.",
+        message: e instanceof Error ? e.message : "Failed to delete.",
         kind: "error",
       });
     }
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-md pb-28">
-      <header className="sticky top-0 z-30 border-b border-gray-100 bg-white/90 px-4 py-3 backdrop-blur">
-        <h1 className="text-lg font-bold">Catatan Belanja</h1>
-        <p className="text-xs text-gray-500">Pengeluaran rumah tangga</p>
+    <main className="mx-auto min-h-screen max-w-2xl px-4 pb-28">
+      <header className="sticky top-0 z-10 -mx-4 mb-4 border-b border-gray-100 bg-gray-50/90 px-4 py-4 backdrop-blur">
+        <h1 className="text-xl font-bold">All Entries</h1>
+        <MumTabs active="entries" />
       </header>
 
-      <section className="px-4 pt-4">
+      <section>
         {loading ? (
-          <p className="py-16 text-center text-sm text-gray-400">Memuat…</p>
+          <p className="py-16 text-center text-sm text-gray-400">Loading…</p>
         ) : error ? (
           <div className="py-16 text-center">
             <p className="text-sm text-red-600">{error}</p>
@@ -56,17 +57,15 @@ export default function WorkerPage() {
               onClick={reload}
               className="mt-3 rounded-full bg-gray-800 px-4 py-2 text-sm text-white"
             >
-              Coba lagi
+              Retry
             </button>
           </div>
         ) : expenses.length === 0 ? (
           <div className="py-16 text-center">
             <div className="text-4xl">🧾</div>
             <p className="mt-3 text-sm text-gray-500">
-              Belum ada catatan.
-              <br />
-              Tekan tombol{" "}
-              <span className="font-bold text-green-600">+</span> untuk menambah.
+              No entries yet. Tap{" "}
+              <span className="font-bold text-green-600">+</span> to add one.
             </p>
           </div>
         ) : (
@@ -74,9 +73,9 @@ export default function WorkerPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 text-left text-xs text-gray-400">
-                  <th className="px-3 py-2 font-medium">Tanggal</th>
-                  <th className="px-3 py-2 font-medium">Kategori</th>
-                  <th className="px-3 py-2 text-right font-medium">Jumlah</th>
+                  <th className="px-3 py-2 font-medium">Date</th>
+                  <th className="px-3 py-2 font-medium">Category</th>
+                  <th className="px-3 py-2 text-right font-medium">Amount</th>
                   <th className="px-1 py-2" />
                 </tr>
               </thead>
@@ -92,14 +91,14 @@ export default function WorkerPage() {
                         className="cursor-pointer px-3 py-3 text-gray-500"
                         onClick={() => setSheet({ mode: "edit", expense: exp })}
                       >
-                        {formatDateShort(exp.entry_date, "id-ID")}
+                        {formatDateShort(exp.entry_date)}
                       </td>
                       <td
                         className="cursor-pointer px-3 py-3"
                         onClick={() => setSheet({ mode: "edit", expense: exp })}
                       >
                         <span className="mr-1">{cat?.emoji}</span>
-                        <span className="text-gray-700">{cat?.labelId}</span>
+                        <span className="text-gray-700">{cat?.labelEn}</span>
                         {exp.note && (
                           <span className="mt-0.5 block text-xs text-gray-400">
                             {exp.note}
@@ -116,7 +115,7 @@ export default function WorkerPage() {
                         <button
                           onClick={() => handleDelete(exp)}
                           className="rounded-full px-2 py-1 text-gray-300 hover:text-red-500"
-                          aria-label="Hapus"
+                          aria-label="Delete"
                         >
                           🗑️
                         </button>
@@ -130,11 +129,11 @@ export default function WorkerPage() {
         )}
       </section>
 
-      {/* Floating Quick-Add button */}
+      {/* Floating Quick-Add button (English) */}
       <button
         onClick={() => setSheet({ mode: "add" })}
         className="fixed bottom-6 right-6 z-30 flex h-16 w-16 items-center justify-center rounded-full bg-green-600 text-4xl font-light text-white shadow-lg transition active:scale-90"
-        aria-label="Tambah pengeluaran"
+        aria-label="Add expense"
       >
         +
       </button>
@@ -142,7 +141,7 @@ export default function WorkerPage() {
       {sheet && (
         <ExpenseSheet
           mode={sheet.mode}
-          lang="id"
+          lang="en"
           initial={sheet.mode === "edit" ? sheet.expense : undefined}
           onClose={() => setSheet(null)}
           onSubmit={handleSubmit}

@@ -1,24 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
-import { CATEGORIES, CATEGORY_MAP } from "@/lib/categories";
-import { formatMoney, formatDateShort } from "@/lib/format";
-import type { Expense, ExpenseInput } from "@/lib/types";
+import { CATEGORIES } from "@/lib/categories";
+import { formatMoney } from "@/lib/format";
 import { useExpenses } from "@/lib/useExpenses";
 import { getPeriodRange, isWithin, type Period } from "@/lib/time";
-import ExpenseSheet from "@/components/ExpenseSheet";
-import Toast, { type ToastState } from "@/components/Toast";
+import MumTabs from "@/components/MumTabs";
 
 export default function MumPage() {
-  const { expenses, loading, error, add, edit, remove } = useExpenses();
+  const { expenses, loading, error } = useExpenses();
   const [period, setPeriod] = useState<Period>("weekly");
   // 0 = current period, -1 = previous, +1 = next …
   const [offset, setOffset] = useState(0);
-  const [sheet, setSheet] = useState<
-    { mode: "add" } | { mode: "edit"; expense: Expense } | null
-  >(null);
-  const [toast, setToast] = useState<ToastState | null>(null);
 
   function changePeriod(p: Period) {
     setPeriod(p);
@@ -49,51 +42,11 @@ export default function MumPage() {
     [totals]
   );
 
-  async function handleSubmit(input: ExpenseInput) {
-    if (sheet?.mode === "edit") {
-      await edit(sheet.expense.id, input);
-      setToast({ message: "Changes saved.", kind: "success" });
-    } else {
-      await add(input);
-      setToast({ message: "Saved.", kind: "success" });
-    }
-    setSheet(null);
-  }
-
-  async function handleDelete(exp: Expense) {
-    if (!window.confirm("Delete this entry?")) return;
-    try {
-      await remove(exp.id);
-      setToast({ message: "Deleted.", kind: "success" });
-    } catch (e) {
-      setToast({
-        message: e instanceof Error ? e.message : "Failed to delete.",
-        kind: "error",
-      });
-    }
-  }
-
   return (
-    <main className="mx-auto min-h-screen max-w-2xl px-4 pb-28">
+    <main className="mx-auto min-h-screen max-w-2xl px-4 pb-16">
       <header className="sticky top-0 z-10 -mx-4 mb-4 border-b border-gray-100 bg-gray-50/90 px-4 py-4 backdrop-blur">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold">Spending Dashboard</h1>
-          <Link href="/worker" className="text-xs text-gray-400">
-            Entry screen →
-          </Link>
-        </div>
-        {/* sub-nav */}
-        <div className="mt-3 flex gap-2">
-          <span className="rounded-full bg-slate-800 px-3 py-1 text-sm font-medium text-white">
-            Summary
-          </span>
-          <Link
-            href="/mum/calendar"
-            className="rounded-full bg-gray-200 px-3 py-1 text-sm font-medium text-gray-600"
-          >
-            Calendar
-          </Link>
-        </div>
+        <h1 className="text-xl font-bold">Spending Dashboard</h1>
+        <MumTabs active="summary" />
       </header>
 
       {/* Weekly / Monthly toggle */}
@@ -161,7 +114,7 @@ export default function MumPage() {
           </div>
 
           {/* Category breakdown with bars */}
-          <div className="mb-6 space-y-3">
+          <div className="space-y-3">
             {CATEGORIES.map((c) => {
               const val = totals.get(c.key) ?? 0;
               const pct = (val / maxCat) * 100;
@@ -186,97 +139,8 @@ export default function MumPage() {
               );
             })}
           </div>
-
-          {/* Entries — editable + deletable */}
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-700">
-                Entries this period
-              </h2>
-              <span className="text-xs text-gray-400">{inRange.length}</span>
-            </div>
-            {inRange.length === 0 ? (
-              <p className="py-6 text-center text-sm text-gray-400">
-                No entries in this period.
-              </p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-gray-400">
-                    <th className="py-1 font-medium">Date</th>
-                    <th className="py-1 font-medium">Category</th>
-                    <th className="py-1 text-right font-medium">Amount</th>
-                    <th className="py-1" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {inRange.map((e) => {
-                    const cat = CATEGORY_MAP[e.category];
-                    return (
-                      <tr key={e.id} className="border-t border-gray-50">
-                        <td
-                          className="cursor-pointer py-2 text-gray-500"
-                          onClick={() => setSheet({ mode: "edit", expense: e })}
-                        >
-                          {formatDateShort(e.entry_date)}
-                        </td>
-                        <td
-                          className="cursor-pointer py-2 text-gray-700"
-                          onClick={() => setSheet({ mode: "edit", expense: e })}
-                        >
-                          <span className="mr-1">{cat?.emoji}</span>
-                          {cat?.labelEn}
-                          {e.note && (
-                            <span className="mt-0.5 block text-xs text-gray-400">
-                              {e.note}
-                            </span>
-                          )}
-                        </td>
-                        <td
-                          className="cursor-pointer py-2 text-right font-medium"
-                          onClick={() => setSheet({ mode: "edit", expense: e })}
-                        >
-                          {formatMoney(e.amount)}
-                        </td>
-                        <td className="py-2 pl-1 text-right">
-                          <button
-                            onClick={() => handleDelete(e)}
-                            className="rounded-full px-2 py-1 text-gray-300 hover:text-red-500"
-                            aria-label="Delete"
-                          >
-                            🗑️
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
         </>
       )}
-
-      {/* Floating Quick-Add button (English) */}
-      <button
-        onClick={() => setSheet({ mode: "add" })}
-        className="fixed bottom-6 right-6 z-30 flex h-16 w-16 items-center justify-center rounded-full bg-green-600 text-4xl font-light text-white shadow-lg transition active:scale-90"
-        aria-label="Add expense"
-      >
-        +
-      </button>
-
-      {sheet && (
-        <ExpenseSheet
-          mode={sheet.mode}
-          lang="en"
-          initial={sheet.mode === "edit" ? sheet.expense : undefined}
-          onClose={() => setSheet(null)}
-          onSubmit={handleSubmit}
-        />
-      )}
-
-      <Toast toast={toast} onDismiss={() => setToast(null)} />
     </main>
   );
 }

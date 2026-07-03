@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import {
   BIG_CATEGORIES,
   BIG_CATEGORY_OF,
@@ -11,6 +10,7 @@ import {
 import { formatMoney, formatDateShort } from "@/lib/format";
 import { useExpenses } from "@/lib/useExpenses";
 import { getMonthGrid } from "@/lib/time";
+import MumTabs from "@/components/MumTabs";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -54,24 +54,8 @@ export default function CalendarPage() {
   return (
     <main className="mx-auto min-h-screen max-w-2xl px-4 pb-16">
       <header className="sticky top-0 z-10 -mx-4 mb-4 border-b border-gray-100 bg-gray-50/90 px-4 py-4 backdrop-blur">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold">Spending Calendar</h1>
-          <Link href="/worker" className="text-xs text-gray-400">
-            Entry screen →
-          </Link>
-        </div>
-        {/* sub-nav */}
-        <div className="mt-3 flex gap-2">
-          <Link
-            href="/mum"
-            className="rounded-full bg-gray-200 px-3 py-1 text-sm font-medium text-gray-600"
-          >
-            Summary
-          </Link>
-          <span className="rounded-full bg-slate-800 px-3 py-1 text-sm font-medium text-white">
-            Calendar
-          </span>
-        </div>
+        <h1 className="text-xl font-bold">Spending Calendar</h1>
+        <MumTabs active="calendar" />
       </header>
 
       {/* Legend */}
