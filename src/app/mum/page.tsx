@@ -1,14 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CATEGORIES } from "@/lib/categories";
+import Link from "next/link";
+import { CATEGORIES, CATEGORY_MAP } from "@/lib/categories";
 import { formatMoney, formatDateShort } from "@/lib/format";
-import type { CashInput, CashTransaction } from "@/lib/types";
+import type { ExpenseInput, CashInput } from "@/lib/types";
 import { useLedger } from "@/lib/useLedger";
 import { getPeriodRange, isWithin, type Period } from "@/lib/time";
 import MumTabs from "@/components/MumTabs";
 import BalanceCard from "@/components/BalanceCard";
-import CashSheet from "@/components/CashSheet";
+import QuickAddSheet from "@/components/QuickAddSheet";
 import Toast, { type ToastState } from "@/components/Toast";
 
 export default function MumPage() {
@@ -19,12 +20,12 @@ export default function MumPage() {
     balance,
     loading,
     error,
+    addExpense,
     addCash,
-    removeCash,
   } = useLedger();
   const [period, setPeriod] = useState<Period>("weekly");
   const [offset, setOffset] = useState(0);
-  const [cashSheet, setCashSheet] = useState(false);
+  const [quickAdd, setQuickAdd] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
 
   function changePeriod(p: Period) {
@@ -49,27 +50,31 @@ export default function MumPage() {
     [totals]
   );
 
-  async function handleLogCash(input: CashInput) {
+  // 3 most recent activities (expenses + cash mixed), newest first.
+  const recent = useMemo(() => {
+    const items = [
+      ...expenses.map((e) => ({ kind: "expense" as const, date: e.entry_date, ts: e.created_at, e })),
+      ...cash.map((c) => ({ kind: "cash" as const, date: c.entry_date, ts: c.created_at, c })),
+    ].sort((a, b) => {
+      if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+      return b.ts < a.ts ? -1 : 1;
+    });
+    return items.slice(0, 3);
+  }, [expenses, cash]);
+
+  async function handleAddExpense(input: ExpenseInput) {
+    await addExpense(input);
+    setToast({ message: "Saved.", kind: "success" });
+    setQuickAdd(false);
+  }
+  async function handleAddCash(input: CashInput) {
     await addCash(input);
     setToast({ message: "Cash logged.", kind: "success" });
-    setCashSheet(false);
-  }
-
-  async function handleDeleteCash(c: CashTransaction) {
-    if (!window.confirm("Delete this cash transaction?")) return;
-    try {
-      await removeCash(c.id);
-      setToast({ message: "Deleted.", kind: "success" });
-    } catch (e) {
-      setToast({
-        message: e instanceof Error ? e.message : "Failed to delete.",
-        kind: "error",
-      });
-    }
+    setQuickAdd(false);
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-2xl px-4 pb-16">
+    <main className="mx-auto min-h-screen max-w-2xl px-4 pb-28">
       <header className="sticky top-0 z-10 -mx-4 mb-4 border-b border-gray-100 bg-gray-50/90 px-4 py-4 backdrop-blur">
         <h1 className="text-xl font-bold">Spending Dashboard</h1>
         <MumTabs active="summary" />
@@ -78,63 +83,52 @@ export default function MumPage() {
       {loading ? (
         <p className="py-16 text-center text-sm text-gray-400">Loading…</p>
       ) : error ? (
-        <p className="py-16 text-center text-sm text-red-600">{error}</p>
+        <p className="py-16 text-center text-sm text-red-600">Failed to load data.</p>
       ) : (
         <>
-          {/* Balance + cash logging */}
           <BalanceCard balance={balance} lang="en" />
-          <div className="mb-5 mt-3">
-            <button
-              onClick={() => setCashSheet(true)}
-              className="w-full rounded-2xl border-2 border-emerald-700 py-3 text-sm font-semibold text-emerald-800 transition active:scale-[0.99]"
-            >
-              ＋ Log cash given / collected
-            </button>
 
-            {cash.length > 0 && (
-              <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
-                <h2 className="mb-2 text-sm font-semibold text-gray-700">Cash log</h2>
-                <table className="w-full text-sm">
-                  <tbody>
-                    {cash.map((c) => (
-                      <tr key={c.id} className="border-t border-gray-50 first:border-0">
-                        <td className="py-2 text-gray-500">
-                          {formatDateShort(c.entry_date)}
-                        </td>
-                        <td className="py-2">
-                          {c.type === "given" ? (
-                            <span className="font-medium text-green-600">
-                              Given to helper
-                            </span>
-                          ) : (
-                            <span className="font-medium text-red-600">
-                              Collected from helper
-                            </span>
-                          )}
-                          {c.note && (
-                            <span className="mt-0.5 block text-xs text-gray-400">
-                              {c.note}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2 text-right font-semibold">
-                          {c.type === "given" ? "+" : "−"}
-                          {formatMoney(c.amount)}
-                        </td>
-                        <td className="py-2 pl-1 text-right">
-                          <button
-                            onClick={() => handleDeleteCash(c)}
-                            className="rounded-full px-2 py-1 text-gray-300 hover:text-red-500"
-                            aria-label="Delete cash transaction"
-                          >
-                            🗑️
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+          {/* Recent Activity preview */}
+          <div className="mb-5 mt-3 rounded-2xl bg-white p-4 shadow-sm">
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-700">Recent Activity</h2>
+              <Link href="/mum/entries" className="text-xs font-medium text-blue-600">
+                See all →
+              </Link>
+            </div>
+            {recent.length === 0 ? (
+              <p className="py-3 text-center text-sm text-gray-400">No activity yet.</p>
+            ) : (
+              <ul className="divide-y divide-gray-50">
+                {recent.map((item) =>
+                  item.kind === "expense" ? (
+                    <li key={`e${item.e.id}`} className="flex items-center justify-between py-2">
+                      <span className="text-sm text-gray-700">
+                        <span className="mr-1">{CATEGORY_MAP[item.e.category]?.emoji}</span>
+                        {CATEGORY_MAP[item.e.category]?.labelEn}
+                      </span>
+                      <span className="flex items-center gap-3">
+                        <span className="text-xs text-gray-400">{formatDateShort(item.date)}</span>
+                        <span className="text-sm font-semibold">{formatMoney(item.e.amount)}</span>
+                      </span>
+                    </li>
+                  ) : (
+                    <li key={`c${item.c.id}`} className="flex items-center justify-between py-2">
+                      <span className={`text-sm font-medium ${item.c.type === "given" ? "text-emerald-700" : "text-amber-700"}`}>
+                        <span className="mr-1">{item.c.type === "given" ? "💰" : "🔄"}</span>
+                        {item.c.type === "given" ? "Cash from Mum" : "Cash back to Mum"}
+                      </span>
+                      <span className="flex items-center gap-3">
+                        <span className="text-xs text-gray-400">{formatDateShort(item.date)}</span>
+                        <span className={`text-sm font-semibold ${item.c.type === "given" ? "text-emerald-700" : "text-amber-700"}`}>
+                          {item.c.type === "given" ? "+" : "−"}
+                          {formatMoney(item.c.amount)}
+                        </span>
+                      </span>
+                    </li>
+                  )
+                )}
+              </ul>
             )}
           </div>
 
@@ -182,9 +176,7 @@ export default function MumPage() {
 
           {/* Total */}
           <div className="mb-5 rounded-2xl bg-slate-800 p-5 text-white">
-            <div className="text-xs uppercase tracking-wide text-slate-300">
-              Total spent
-            </div>
+            <div className="text-xs uppercase tracking-wide text-slate-300">Total spent</div>
             <div className="mt-1 text-3xl font-bold">{formatMoney(grandTotal)}</div>
             <div className="mt-1 text-xs text-slate-400">
               {inRange.length} {inRange.length === 1 ? "entry" : "entries"}
@@ -201,9 +193,7 @@ export default function MumPage() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-xl">{c.emoji}</span>
-                      <span className="text-sm font-medium text-gray-700">
-                        {c.labelEn}
-                      </span>
+                      <span className="text-sm font-medium text-gray-700">{c.labelEn}</span>
                     </div>
                     <span className="text-sm font-bold">{formatMoney(val)}</span>
                   </div>
@@ -220,10 +210,20 @@ export default function MumPage() {
         </>
       )}
 
-      {cashSheet && (
-        <CashSheet
-          onClose={() => setCashSheet(false)}
-          onSubmit={handleLogCash}
+      {/* Unified Quick-Add FAB (Expense | Cash) */}
+      <button
+        onClick={() => setQuickAdd(true)}
+        className="fixed bottom-6 right-6 z-30 flex h-16 w-16 items-center justify-center rounded-full bg-green-600 text-4xl font-light text-white shadow-lg transition active:scale-90"
+        aria-label="Add activity"
+      >
+        +
+      </button>
+
+      {quickAdd && (
+        <QuickAddSheet
+          onClose={() => setQuickAdd(false)}
+          onSubmitExpense={handleAddExpense}
+          onSubmitCash={handleAddCash}
           minDate={settings?.first_activity_date}
         />
       )}

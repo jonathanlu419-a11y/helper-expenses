@@ -6,159 +6,196 @@ import { sumExpenses } from "@/lib/balance";
 import type { Expense, CashTransaction } from "@/lib/types";
 import type { Lang } from "./ExpenseSheet";
 
-// Entries grouped by calendar day (HK). Each day shows a header with the day's
-// spent total + any cash movement (Feature 3), the individual expense rows,
-// and a subtotal line after the rows (Feature 1). Days that had only a cash
-// transaction (no expenses) still appear so cash activity is never hidden.
+// Unified day-grouped activity table shown identically on /worker and
+// /mum/entries. Each day shows:
+//   - header: date, day's total spent, and the running cash-float balance as
+//     of the END of that day (opening + given − collected − expenses,
+//     cumulative through that day).
+//   - rows: expenses AND cash transactions for that day, mixed and sorted by
+//     time, cash rows visually distinct.
+//
+// Permissions are driven by which handlers are passed:
+//   - expenses: onEditExpense / onDeleteExpense (both pages pass these).
+//   - cash: onDeleteCash — passed only by Mum; when absent, cash rows are
+//     read-only (the worker's view).
 
 const STRINGS: Record<Lang, Record<string, string>> = {
-  id: {
-    spent: "Belanja",
-    subtotal: "Subtotal",
-    received: "Terima dari Mum",
-    paidBack: "Kembali ke Mum",
-    noExpenses: "Tidak ada belanja",
-  },
-  en: {
-    spent: "Spent",
-    subtotal: "Subtotal",
-    received: "Received from Mum",
-    paidBack: "Paid back to Mum",
-    noExpenses: "No expenses",
-  },
+  id: { spent: "Belanja", balance: "Sisa", cashFrom: "Uang dari Mum", cashBack: "Dikembalikan ke Mum" },
+  en: { spent: "Spent", balance: "Balance", cashFrom: "Cash from Mum", cashBack: "Cash back to Mum" },
 };
 
-interface DayCash {
-  given: number;
-  collected: number;
-}
+type Row =
+  | { kind: "expense"; ts: string; e: Expense }
+  | { kind: "cash"; ts: string; c: CashTransaction };
 
 export default function DayGroupedEntries({
   expenses,
   cash,
+  openingBalance,
   lang,
-  onEdit,
-  onDelete,
+  onEditExpense,
+  onDeleteExpense,
+  onDeleteCash,
 }: {
   expenses: Expense[];
   cash: CashTransaction[];
+  openingBalance: number;
   lang: Lang;
-  onEdit: (e: Expense) => void;
-  onDelete: (e: Expense) => void;
+  onEditExpense: (e: Expense) => void;
+  onDeleteExpense: (e: Expense) => void;
+  onDeleteCash?: (c: CashTransaction) => void;
 }) {
   const t = STRINGS[lang];
-  const locale = lang === "id" ? "id-ID" : "en-GB";
 
-  // Group expenses by day.
-  const byDay = new Map<string, Expense[]>();
-  for (const e of expenses) {
-    const arr = byDay.get(e.entry_date);
-    if (arr) arr.push(e);
-    else byDay.set(e.entry_date, [e]);
-  }
+  // Rows grouped by day.
+  const rowsByDay = new Map<string, Row[]>();
+  const push = (day: string, row: Row) => {
+    const arr = rowsByDay.get(day);
+    if (arr) arr.push(row);
+    else rowsByDay.set(day, [row]);
+  };
+  for (const e of expenses) push(e.entry_date, { kind: "expense", ts: e.created_at, e });
+  for (const c of cash) push(c.entry_date, { kind: "cash", ts: c.created_at, c });
 
-  // Cash per day.
-  const cashByDay = new Map<string, DayCash>();
-  for (const c of cash) {
-    let rec = cashByDay.get(c.entry_date);
-    if (!rec) {
-      rec = { given: 0, collected: 0 };
-      cashByDay.set(c.entry_date, rec);
+  // Running end-of-day balance: accumulate oldest → newest.
+  const daysAsc = Array.from(rowsByDay.keys()).sort();
+  const endBalance = new Map<string, number>();
+  let running = openingBalance;
+  for (const day of daysAsc) {
+    for (const row of rowsByDay.get(day)!) {
+      if (row.kind === "expense") running -= row.e.amount;
+      else running += row.c.type === "given" ? row.c.amount : -row.c.amount;
     }
-    if (c.type === "given") rec.given += c.amount;
-    else rec.collected += c.amount;
+    endBalance.set(day, Math.round(running * 100) / 100);
   }
 
-  // Union of all active days, newest first.
-  const days = Array.from(new Set([...byDay.keys(), ...cashByDay.keys()])).sort(
-    (a, b) => (a < b ? 1 : -1)
-  );
+  // Render newest day first.
+  const daysDesc = [...daysAsc].reverse();
 
   return (
     <div className="space-y-4">
-      {days.map((day) => {
-        const dayExpenses = byDay.get(day) ?? [];
-        const spent = sumExpenses(dayExpenses);
-        const dc = cashByDay.get(day);
+      {daysDesc.map((day) => {
+        const rows = [...rowsByDay.get(day)!].sort((a, b) => (a.ts < b.ts ? 1 : -1));
+        const spent = sumExpenses(rows.filter((r): r is Extract<Row, { kind: "expense" }> => r.kind === "expense").map((r) => r.e));
         return (
-          <div
-            key={day}
-            className="overflow-hidden rounded-2xl border border-gray-100 bg-white"
-          >
-            {/* Day header */}
-            <div className="flex items-start justify-between border-b border-gray-100 bg-gray-50 px-3 py-2">
+          <div key={day} className="overflow-hidden rounded-2xl border border-gray-100 bg-white">
+            {/* Day header: spent + running balance */}
+            <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-3 py-2">
               <div className="text-sm font-semibold text-gray-700">
-                {formatDateShort(day, locale)}
+                {formatDateShort(day, lang)}
               </div>
-              <div className="text-right">
-                <div className="text-xs font-medium text-gray-600">
-                  {t.spent}: {formatMoney(spent)}
-                </div>
-                {dc && dc.given > 0 && (
-                  <div className="text-xs font-medium text-green-600">
-                    {t.received}: {formatMoney(dc.given)}
-                  </div>
-                )}
-                {dc && dc.collected > 0 && (
-                  <div className="text-xs font-medium text-red-600">
-                    {t.paidBack}: {formatMoney(dc.collected)}
-                  </div>
-                )}
+              <div className="flex gap-4 text-xs">
+                <span className="text-gray-500">
+                  {t.spent}: <span className="font-semibold text-gray-700">{formatMoney(spent)}</span>
+                </span>
+                <span className="text-gray-500">
+                  {t.balance}: <span className="font-semibold text-emerald-700">{formatMoney(endBalance.get(day) ?? 0)}</span>
+                </span>
               </div>
             </div>
 
-            {/* Entry rows */}
-            {dayExpenses.length === 0 ? (
-              <div className="px-3 py-3 text-xs text-gray-400">{t.noExpenses}</div>
-            ) : (
-              <table className="w-full text-sm">
-                <tbody>
-                  {dayExpenses.map((exp) => {
-                    const cat = CATEGORY_MAP[exp.category];
-                    const label = lang === "id" ? cat?.labelId : cat?.labelEn;
-                    return (
-                      <tr key={exp.id} className="border-b border-gray-50 last:border-0">
-                        <td
-                          className="cursor-pointer px-3 py-3"
-                          onClick={() => onEdit(exp)}
-                        >
-                          <span className="mr-1">{cat?.emoji}</span>
-                          <span className="text-gray-700">{label}</span>
-                          {exp.note && (
-                            <span className="mt-0.5 block text-xs text-gray-400">
-                              {exp.note}
-                            </span>
-                          )}
-                        </td>
-                        <td
-                          className="cursor-pointer px-3 py-3 text-right font-semibold"
-                          onClick={() => onEdit(exp)}
-                        >
-                          {formatMoney(exp.amount)}
-                        </td>
-                        <td className="px-1 py-3 text-right">
-                          <button
-                            onClick={() => onDelete(exp)}
-                            className="rounded-full px-2 py-1 text-gray-300 hover:text-red-500"
-                            aria-label="delete"
-                          >
-                            🗑️
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-
-            {/* Day subtotal (Feature 1) */}
-            <div className="flex justify-end border-t border-gray-100 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700">
-              {t.subtotal}: {formatMoney(spent)}
-            </div>
+            {/* Rows */}
+            <table className="w-full text-sm">
+              <tbody>
+                {rows.map((row) =>
+                  row.kind === "expense" ? (
+                    <ExpenseRow
+                      key={`e${row.e.id}`}
+                      exp={row.e}
+                      lang={lang}
+                      onEdit={onEditExpense}
+                      onDelete={onDeleteExpense}
+                    />
+                  ) : (
+                    <CashRow
+                      key={`c${row.c.id}`}
+                      cash={row.c}
+                      label={row.c.type === "given" ? t.cashFrom : t.cashBack}
+                      onDelete={onDeleteCash}
+                    />
+                  )
+                )}
+              </tbody>
+            </table>
           </div>
         );
       })}
     </div>
+  );
+}
+
+function ExpenseRow({
+  exp,
+  lang,
+  onEdit,
+  onDelete,
+}: {
+  exp: Expense;
+  lang: Lang;
+  onEdit: (e: Expense) => void;
+  onDelete: (e: Expense) => void;
+}) {
+  const cat = CATEGORY_MAP[exp.category];
+  const label = lang === "id" ? cat?.labelId : cat?.labelEn;
+  return (
+    <tr className="border-b border-gray-50 last:border-0">
+      <td className="cursor-pointer px-3 py-3" onClick={() => onEdit(exp)}>
+        <span className="mr-1">{cat?.emoji}</span>
+        <span className="text-gray-700">{label}</span>
+        {exp.note && <span className="mt-0.5 block text-xs text-gray-400">{exp.note}</span>}
+      </td>
+      <td className="cursor-pointer px-3 py-3 text-right font-semibold" onClick={() => onEdit(exp)}>
+        {formatMoney(exp.amount)}
+      </td>
+      <td className="px-1 py-3 text-right">
+        <button
+          onClick={() => onDelete(exp)}
+          className="rounded-full px-2 py-1 text-gray-300 hover:text-red-500"
+          aria-label="delete"
+        >
+          🗑️
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function CashRow({
+  cash,
+  label,
+  onDelete,
+}: {
+  cash: CashTransaction;
+  label: string;
+  onDelete?: (c: CashTransaction) => void;
+}) {
+  const given = cash.type === "given";
+  // Given (Mum → helper) = green; Collected (helper → Mum) = amber. Both
+  // clearly distinct from the plain-white expense rows.
+  const tone = given ? "bg-emerald-50" : "bg-amber-50";
+  const amountColor = given ? "text-emerald-700" : "text-amber-700";
+  return (
+    <tr className={`border-b border-gray-50 last:border-0 ${tone}`}>
+      <td className="px-3 py-3">
+        <span className="mr-1">{given ? "💰" : "🔄"}</span>
+        <span className={`font-medium ${amountColor}`}>{label}</span>
+        {cash.note && <span className="mt-0.5 block text-xs text-gray-400">{cash.note}</span>}
+      </td>
+      <td className={`px-3 py-3 text-right font-semibold ${amountColor}`}>
+        {given ? "+" : "−"}
+        {formatMoney(cash.amount)}
+      </td>
+      <td className="px-1 py-3 text-right">
+        {onDelete && (
+          <button
+            onClick={() => onDelete(cash)}
+            className="rounded-full px-2 py-1 text-gray-300 hover:text-red-500"
+            aria-label="delete cash"
+          >
+            🗑️
+          </button>
+        )}
+      </td>
+    </tr>
   );
 }

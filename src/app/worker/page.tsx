@@ -61,7 +61,7 @@ export default function WorkerPage() {
         <p className="py-16 text-center text-sm text-gray-400">Memuat…</p>
       ) : error ? (
         <div className="py-16 text-center">
-          <p className="text-sm text-red-600">{error}</p>
+          <p className="text-sm text-red-600">Gagal memuat data.</p>
           <button
             onClick={reload}
             className="mt-3 rounded-full bg-gray-800 px-4 py-2 text-sm text-white"
@@ -89,12 +89,14 @@ export default function WorkerPage() {
                 </p>
               </div>
             ) : (
+              // worker passes no onDeleteCash → cash rows stay read-only
               <DayGroupedEntries
                 expenses={expenses}
                 cash={cash}
+                openingBalance={settings?.opening_balance ?? 0}
                 lang="id"
-                onEdit={(e) => setSheet({ mode: "edit", expense: e })}
-                onDelete={handleDelete}
+                onEditExpense={(e) => setSheet({ mode: "edit", expense: e })}
+                onDeleteExpense={handleDelete}
               />
             )}
           </div>
