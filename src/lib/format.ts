@@ -26,3 +26,23 @@ export function formatDateShort(iso: string, lang: "id" | "en" = "en"): string {
   const months = lang === "id" ? MONTHS_ID : MONTHS_EN;
   return `${d} ${months[m - 1]} ${y}`;
 }
+
+// Full day + month names, explicit arrays (never rely on the runtime's Intl
+// locale). Day index matches Date.getDay(): 0 = Sunday.
+const DAYS_EN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const DAYS_ID = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+const MONTHS_EN_FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const MONTHS_ID_FULL = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+
+/**
+ * Long day header with weekday + full month name, e.g.
+ *   id → "Jumat, 3 Juli 2026"
+ *   en → "Friday, 3 July 2026"
+ */
+export function formatDayHeader(iso: string, lang: "id" | "en" = "en"): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dow = new Date(y, m - 1, d, 12).getDay(); // local noon; date-only, TZ-safe
+  const days = lang === "id" ? DAYS_ID : DAYS_EN;
+  const months = lang === "id" ? MONTHS_ID_FULL : MONTHS_EN_FULL;
+  return `${days[dow]}, ${d} ${months[m - 1]} ${y}`;
+}

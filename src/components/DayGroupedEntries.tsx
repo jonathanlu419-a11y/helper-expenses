@@ -1,7 +1,7 @@
 "use client";
 
 import { CATEGORY_MAP } from "@/lib/categories";
-import { formatMoney, formatDateShort } from "@/lib/format";
+import { formatMoney, formatDayHeader } from "@/lib/format";
 import { sumExpenses } from "@/lib/balance";
 import type { Expense, CashTransaction } from "@/lib/types";
 import type { Lang } from "./ExpenseSheet";
@@ -82,7 +82,7 @@ export default function DayGroupedEntries({
             {/* Day header: spent + running balance */}
             <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-3 py-2">
               <div className="text-sm font-semibold text-gray-700">
-                {formatDateShort(day, lang)}
+                {formatDayHeader(day, lang)}
               </div>
               <div className="flex gap-4 text-xs">
                 <span className="text-gray-500">
