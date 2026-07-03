@@ -4,6 +4,7 @@ A tiny two-page household spending tracker.
 
 - **`/worker`** — Bahasa Indonesia quick-entry screen for the domestic helper. A floating **+** button opens a 2-step sheet (pick category → enter amount), and every entry is listed in a table that can be edited or deleted.
 - **`/mum`** — English dashboard for the employer. Toggle **Weekly / Monthly**, step through periods, and see per-category totals (with bars), a grand total, and the entries. Mum can also add (its own English **+** button), edit, and delete entries.
+- **`/mum/calendar`** — month-view calendar (linked from the dashboard sub-nav). Each day cell shows that day's totals rolled up into **3 big categories** — Food / Transport / Household — with prev/next month navigation and a tap-to-expand day detail. The roll-up is view-only; the underlying 7-category data is unchanged.
 
 Both pages read from and manage the **same** `expenses` table via the same API.
 
@@ -99,7 +100,7 @@ Single `expenses` table — see [`db/schema.sql`](db/schema.sql):
 | `id` | `BIGSERIAL` PK | |
 | `category` | `TEXT` | one of the 7 keys (CHECK-constrained) |
 | `amount` | `NUMERIC(12,2)` | `>= 0` |
-| `entry_date` | `DATE` | defaults to `CURRENT_DATE`; the app sends Toronto "today" |
+| `entry_date` | `DATE` | defaults to `CURRENT_DATE`; the app sends Hong Kong "today" |
 | `note` | `TEXT` | nullable, not surfaced in the entry UI (shown if present) |
 | `created_at` | `TIMESTAMPTZ` | auto |
 
@@ -116,7 +117,7 @@ Single `expenses` table — see [`db/schema.sql`](db/schema.sql):
 
 ## Notes / decisions
 
-- **Timezone: everything is anchored to `America/Toronto`.** "Today" (the entry-date default) and the Weekly/Monthly period boundaries are computed from Toronto local time via `date-fns-tz` (see [`src/lib/time.ts`](src/lib/time.ts)), **not** the server's UTC clock — so a late-night entry lands in the right day/week/month.
+- **Timezone: everything is anchored to `Asia/Hong_Kong`.** "Today" (the entry-date default), the Weekly/Monthly period boundaries, and the calendar month grid are computed from Hong Kong local time via `date-fns-tz` (see [`src/lib/time.ts`](src/lib/time.ts)), **not** the server's UTC clock — so a late-night entry lands in the right day/week/month.
 - **Week = Monday–Sunday.** Monthly = calendar month.
 - **No auth** — both routes are public (MVP). If you later want to deter random URL hits, add a lightweight PIN gate.
 - **No currency logic** — amounts are plain numbers shown with a `$` prefix.

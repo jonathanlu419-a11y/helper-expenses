@@ -38,7 +38,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Amount must be a positive number" }, { status: 400 });
   }
 
-  // Default to Toronto "today" (not the DB/server timezone) when omitted.
+  // Default to Hong Kong "today" (not the DB/server timezone) when omitted.
   const dateStr =
     typeof entry_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(entry_date)
       ? entry_date

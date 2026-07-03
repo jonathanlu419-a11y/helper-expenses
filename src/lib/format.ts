@@ -15,7 +15,7 @@ export function formatMoney(amount: number): string {
 /**
  * Render a "YYYY-MM-DD" string as e.g. "2 Jul 2026".
  * Parsed at local noon so the displayed day never shifts. This is display
- * only — period boundaries are computed in time.ts (Toronto-anchored).
+ * only — period boundaries are computed in time.ts (Hong Kong-anchored).
  */
 export function formatDateShort(iso: string, locale = "en-GB"): string {
   const [y, m, d] = iso.split("-").map(Number);

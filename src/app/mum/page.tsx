@@ -82,6 +82,18 @@ export default function MumPage() {
             Entry screen →
           </Link>
         </div>
+        {/* sub-nav */}
+        <div className="mt-3 flex gap-2">
+          <span className="rounded-full bg-slate-800 px-3 py-1 text-sm font-medium text-white">
+            Summary
+          </span>
+          <Link
+            href="/mum/calendar"
+            className="rounded-full bg-gray-200 px-3 py-1 text-sm font-medium text-gray-600"
+          >
+            Calendar
+          </Link>
+        </div>
       </header>
 
       {/* Weekly / Monthly toggle */}
