@@ -8,7 +8,7 @@ A tiny two-page household spending tracker.
 
 Both pages read from and manage the **same** `expenses` table via the same API.
 
-Built with **Next.js (App Router) + TypeScript + Tailwind + Postgres** (standard `pg` driver, Render Postgres).
+Built with **Next.js (App Router) + TypeScript + Tailwind + Postgres** (standard `pg` driver, Neon serverless Postgres — free tier, runs indefinitely).
 
 ---
 
@@ -36,7 +36,7 @@ Amounts display with a plain `$` prefix and 2 decimals.
    npm install
    ```
 
-2. **Create a new Postgres instance on [Render](https://render.com)** (New → Postgres). Once it's live, copy its **External Database URL** (Render dashboard → your Postgres instance → *Connections* → *External Database URL*).
+2. **Create a Neon Postgres database** — either via the Vercel dashboard (**Storage → Create Database → Neon**, which attaches it to the project) or directly at [neon.tech](https://neon.tech). Copy its **pooled** connection string (host contains `-pooler`).
 
 3. **Configure env**
 
@@ -44,7 +44,7 @@ Amounts display with a plain `$` prefix and 2 decimals.
    cp .env.example .env.local
    ```
 
-   Paste the External Database URL into `.env.local` as `DATABASE_URL`. SSL is handled automatically for Render hosts — no extra parameters needed.
+   Paste the pooled Neon connection string into `.env.local` as `DATABASE_URL`. SSL is handled automatically for remote hosts.
 
 4. **Apply the schema**
 
@@ -70,7 +70,7 @@ Only one is required:
 
 | Variable | Required | Notes |
 |---|---|---|
-| `DATABASE_URL` | ✅ | Render Postgres **External Database URL**. Used by the app (`pg`) and by `npm run db:setup`. |
+| `DATABASE_URL` | ✅ | Neon **pooled** connection string. Used by the app (`pg`) and by `npm run db:setup`. Note: the Vercel↔Neon integration also injects prefixed vars (e.g. `helper_expenses_tracking_DATABASE_URL`), but the app reads the plain `DATABASE_URL` — set that explicitly. |
 
 ---
 
@@ -78,14 +78,14 @@ Only one is required:
 
 1. Push this repo to a **new** GitHub repository.
 2. In Vercel, **Add New → Project** and import that repo (a brand-new Vercel project — unrelated to any existing project).
-3. In the project's **Settings → Environment Variables**, add `DATABASE_URL` = your Render **External Database URL** (the external URL is required so Vercel's servers can reach Render). Add it to Production (and Preview/Development if you want).
+3. In the project's **Settings → Environment Variables**, ensure the plain `DATABASE_URL` = your Neon **pooled** connection string, for Production (and Preview/Development). If you attached Neon via the Vercel integration, it creates *prefixed* vars — add the plain `DATABASE_URL` yourself so the app picks it up.
 4. Deploy.
-5. **Apply the schema once** against the Render database — run it locally against the same URL:
+5. **Apply the schema once** against Neon — run it locally against the same URL:
    ```bash
-   # with DATABASE_URL set in .env.local (the Render External URL)
+   # with DATABASE_URL set in .env.local (the pooled Neon URL)
    npm run db:setup
    ```
-   …or paste the contents of [`db/schema.sql`](db/schema.sql) into Render's PSQL/SQL console.
+   …or paste the contents of [`db/schema.sql`](db/schema.sql) into the Neon SQL editor.
 
 The table is created with `IF NOT EXISTS`, so re-running the setup is safe.
 
