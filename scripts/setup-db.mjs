@@ -44,8 +44,16 @@ function sslConfig(cs) {
 const schema = readFileSync(new URL("../db/schema.sql", import.meta.url), "utf8");
 const statements = schema
   .split(/;\s*$/m)
-  .map((s) => s.trim())
-  .filter((s) => s.length > 0 && !s.startsWith("--"));
+  // Drop full-line SQL comments so a leading comment block doesn't swallow
+  // the statement that follows it, then keep only non-empty chunks.
+  .map((s) =>
+    s
+      .split("\n")
+      .filter((l) => !l.trim().startsWith("--"))
+      .join("\n")
+      .trim()
+  )
+  .filter((s) => s.length > 0);
 
 const client = new Client({ connectionString, ssl: sslConfig(connectionString) });
 
