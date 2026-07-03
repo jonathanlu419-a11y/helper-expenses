@@ -89,6 +89,8 @@ Only one is required:
 
 The table is created with `IF NOT EXISTS`, so re-running the setup is safe.
 
+> **Deploy identity note:** on Vercel's Hobby plan, deployments from a **private** repo are only allowed when the deployed commit's author maps to the account that owns the Vercel project. Commits in this repo are authored with the GitHub noreply address `284824704+jonathanlu419-a11y@users.noreply.github.com` (set via repo-local `git config user.email`) so private-repo deploys aren't blocked.
+
 ---
 
 ## Data model
