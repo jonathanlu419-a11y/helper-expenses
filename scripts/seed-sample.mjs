@@ -68,11 +68,11 @@ const expenseSpec = [
   [20, "meat", 52.0], [20, "rice_noodles", 30.0], [20, "transport", 9.0],
 ];
 
-// [daysAgo, type, amount, note]
+// [daysAgo, type, amount, note] — Indonesian so the helper's page has no English
 const cashSpec = [
-  [20, "given", 800.0, "Initial top-up"],
-  [10, "given", 500.0, "Weekly top-up"],
-  [4, "collected", 200.0, "Returned leftover"],
+  [20, "given", 800.0, "Modal awal"],
+  [10, "given", 500.0, "Tambahan mingguan"],
+  [4, "collected", 200.0, "Sisa dikembalikan"],
 ];
 
 const OPENING_BALANCE = 500.0;
