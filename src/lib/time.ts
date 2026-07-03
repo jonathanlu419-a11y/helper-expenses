@@ -82,6 +82,11 @@ export function isWithin(entryISO: string, range: PeriodRange): boolean {
   return entryISO >= range.startISO && entryISO < range.endISO;
 }
 
+/** First day ("YYYY-MM-01") of the HK current month + offset. */
+export function monthStartISO(offset: number): string {
+  return toISO(addMonths(startOfMonth(plainDate(todayISO())), offset));
+}
+
 export interface CalendarDay {
   /** "YYYY-MM-DD" */
   iso: string;

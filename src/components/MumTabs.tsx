@@ -8,13 +8,14 @@ const TABS = [
   { key: "summary", label: "Summary", href: "/mum" },
   { key: "calendar", label: "Calendar", href: "/mum/calendar" },
   { key: "entries", label: "Entries", href: "/mum/entries" },
+  { key: "settings", label: "Settings", href: "/mum/settings" },
 ] as const;
 
 export type MumTab = (typeof TABS)[number]["key"];
 
 export default function MumTabs({ active }: { active: MumTab }) {
   return (
-    <div className="mt-3 flex gap-2">
+    <div className="mt-3 flex flex-wrap gap-2">
       {TABS.map((t) =>
         t.key === active ? (
           <span

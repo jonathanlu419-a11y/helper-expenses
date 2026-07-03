@@ -5,7 +5,7 @@
 // reuse it; importing this module during `next build` never opens a socket.
 
 import { Pool, type QueryResult, type QueryResultRow } from "pg";
-import type { Expense } from "./types";
+import type { Expense, CashTransaction, CashType, Settings } from "./types";
 import type { CategoryKey } from "./categories";
 
 let pool: Pool | null = null;
@@ -59,5 +59,36 @@ export function mapExpenseRow(row: QueryResultRow): Expense {
     note: (row.note as string | null) ?? null,
     created_at:
       created instanceof Date ? created.toISOString() : String(created),
+  };
+}
+
+export const CASH_COLUMNS = `
+  id,
+  type,
+  amount,
+  to_char(entry_date, 'YYYY-MM-DD') AS entry_date,
+  note,
+  created_at
+`;
+
+export function mapCashRow(row: QueryResultRow): CashTransaction {
+  const created = row.created_at;
+  return {
+    id: Number(row.id),
+    type: row.type as CashType,
+    amount: Number(row.amount),
+    entry_date: String(row.entry_date),
+    note: (row.note as string | null) ?? null,
+    created_at:
+      created instanceof Date ? created.toISOString() : String(created),
+  };
+}
+
+export function mapSettingsRow(row: QueryResultRow): Settings {
+  return {
+    opening_balance: Number(row.opening_balance),
+    first_activity_date: row.first_activity_date
+      ? String(row.first_activity_date)
+      : null,
   };
 }

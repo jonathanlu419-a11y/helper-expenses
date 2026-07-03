@@ -50,12 +50,14 @@ export default function ExpenseSheet({
   initial,
   onClose,
   onSubmit,
+  minDate,
 }: {
   mode: "add" | "edit";
   lang: Lang;
   initial?: Expense;
   onClose: () => void;
   onSubmit: (input: ExpenseInput) => Promise<void>;
+  minDate?: string | null;
 }) {
   const t = STRINGS[lang];
   const catLabel = (c: (typeof CATEGORIES)[number]) =>
@@ -188,6 +190,7 @@ export default function ExpenseSheet({
             <input
               type="date"
               value={date}
+              min={minDate ?? undefined}
               onChange={(e) => setDate(e.target.value)}
               className="mb-4 w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-3 text-base outline-none"
             />

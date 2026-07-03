@@ -8,26 +8,39 @@ import {
   type BigCategoryKey,
 } from "@/lib/categories";
 import { formatMoney, formatDateShort } from "@/lib/format";
-import { useExpenses } from "@/lib/useExpenses";
-import { getMonthGrid } from "@/lib/time";
+import { useLedger } from "@/lib/useLedger";
+import { getMonthGrid, monthStartISO } from "@/lib/time";
 import MumTabs from "@/components/MumTabs";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 type BigTotals = Record<BigCategoryKey, number>;
+interface DayCash {
+  given: number;
+  collected: number;
+}
 
 function emptyTotals(): BigTotals {
   return { food: 0, transport: 0, household: 0 };
 }
 
 export default function CalendarPage() {
-  const { expenses, loading, error } = useExpenses();
+  const { expenses, cash, settings, loading, error } = useLedger();
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
 
   const grid = useMemo(() => getMonthGrid(offset), [offset]);
 
-  // entry_date → per-big-category totals for that day.
+  // Don't navigate to a month entirely before the "first activity" month.
+  const firstActivity = settings?.first_activity_date ?? null;
+  const canGoPrev = useMemo(() => {
+    if (!firstActivity) return true;
+    const firstMonth = firstActivity.slice(0, 7); // YYYY-MM
+    const prevMonth = monthStartISO(offset - 1).slice(0, 7);
+    return prevMonth >= firstMonth;
+  }, [firstActivity, offset]);
+
+  // entry_date → per-big-category expense totals.
   const dayTotals = useMemo(() => {
     const map = new Map<string, BigTotals>();
     for (const e of expenses) {
@@ -43,12 +56,28 @@ export default function CalendarPage() {
     return map;
   }, [expenses]);
 
-  const selectedEntries = useMemo(
-    () =>
-      selected
-        ? expenses.filter((e) => e.entry_date === selected)
-        : [],
+  // entry_date → cash movement.
+  const dayCash = useMemo(() => {
+    const map = new Map<string, DayCash>();
+    for (const c of cash) {
+      let rec = map.get(c.entry_date);
+      if (!rec) {
+        rec = { given: 0, collected: 0 };
+        map.set(c.entry_date, rec);
+      }
+      if (c.type === "given") rec.given += c.amount;
+      else rec.collected += c.amount;
+    }
+    return map;
+  }, [cash]);
+
+  const selectedExpenses = useMemo(
+    () => (selected ? expenses.filter((e) => e.entry_date === selected) : []),
     [expenses, selected]
+  );
+  const selectedCash = useMemo(
+    () => (selected ? cash.filter((c) => c.entry_date === selected) : []),
+    [cash, selected]
   );
 
   return (
@@ -66,13 +95,22 @@ export default function CalendarPage() {
             <span className={`font-medium ${b.colorClass}`}>{b.labelEn}</span>
           </span>
         ))}
+        <span className="flex items-center gap-1">
+          <span className="rounded bg-green-100 px-1 font-medium text-green-700">
+            +$ given
+          </span>
+          <span className="rounded bg-red-100 px-1 font-medium text-red-700">
+            −$ collected
+          </span>
+        </span>
       </div>
 
       {/* Month navigator */}
       <div className="mb-4 flex items-center justify-between rounded-2xl bg-white px-2 py-2 shadow-sm">
         <button
           onClick={() => setOffset((o) => o - 1)}
-          className="rounded-full px-4 py-2 text-lg text-gray-500 active:bg-gray-100"
+          disabled={!canGoPrev}
+          className="rounded-full px-4 py-2 text-lg text-gray-500 active:bg-gray-100 disabled:opacity-30"
           aria-label="Previous month"
         >
           ‹
@@ -80,10 +118,7 @@ export default function CalendarPage() {
         <div className="text-center">
           <div className="text-sm font-semibold">{grid.label}</div>
           {offset !== 0 && (
-            <button
-              onClick={() => setOffset(0)}
-              className="text-xs text-blue-600"
-            >
+            <button onClick={() => setOffset(0)} className="text-xs text-blue-600">
               Back to current
             </button>
           )}
@@ -104,7 +139,6 @@ export default function CalendarPage() {
       ) : (
         <>
           <div className="overflow-hidden rounded-2xl bg-white p-2 shadow-sm">
-            {/* weekday header */}
             <div className="grid grid-cols-7 text-center text-[10px] font-medium uppercase text-gray-400">
               {WEEKDAYS.map((w) => (
                 <div key={w} className="py-1">
@@ -113,11 +147,11 @@ export default function CalendarPage() {
               ))}
             </div>
 
-            {/* weeks */}
             {grid.weeks.map((week, wi) => (
               <div key={wi} className="grid grid-cols-7">
                 {week.map((cell) => {
                   const totals = dayTotals.get(cell.iso);
+                  const dc = dayCash.get(cell.iso);
                   const isSel = selected === cell.iso;
                   return (
                     <button
@@ -125,10 +159,8 @@ export default function CalendarPage() {
                       onClick={() =>
                         setSelected((s) => (s === cell.iso ? null : cell.iso))
                       }
-                      className={`m-0.5 flex min-h-[64px] flex-col rounded-lg border p-1 text-left transition ${
-                        isSel
-                          ? "border-slate-800 bg-slate-50"
-                          : "border-transparent"
+                      className={`m-0.5 flex min-h-[72px] flex-col rounded-lg border p-1 text-left transition ${
+                        isSel ? "border-slate-800 bg-slate-50" : "border-transparent"
                       } ${cell.inMonth ? "bg-gray-50" : "bg-transparent"}`}
                     >
                       <span
@@ -142,18 +174,29 @@ export default function CalendarPage() {
                       >
                         {cell.day}
                       </span>
-                      {cell.inMonth && totals && (
+                      {cell.inMonth && (
                         <span className="mt-0.5 flex flex-col gap-[1px] leading-tight">
-                          {BIG_CATEGORIES.map((b) =>
-                            totals[b.key] > 0 ? (
-                              <span
-                                key={b.key}
-                                className={`text-[9px] font-medium ${b.colorClass}`}
-                              >
-                                {b.emoji}
-                                {Math.round(totals[b.key])}
-                              </span>
-                            ) : null
+                          {totals &&
+                            BIG_CATEGORIES.map((b) =>
+                              totals[b.key] > 0 ? (
+                                <span
+                                  key={b.key}
+                                  className={`text-[9px] font-medium ${b.colorClass}`}
+                                >
+                                  {b.emoji}
+                                  {Math.round(totals[b.key])}
+                                </span>
+                              ) : null
+                            )}
+                          {dc && dc.given > 0 && (
+                            <span className="mt-0.5 rounded bg-green-100 px-1 text-[9px] font-semibold text-green-700">
+                              +{Math.round(dc.given)}
+                            </span>
+                          )}
+                          {dc && dc.collected > 0 && (
+                            <span className="mt-0.5 rounded bg-red-100 px-1 text-[9px] font-semibold text-red-700">
+                              −{Math.round(dc.collected)}
+                            </span>
                           )}
                         </span>
                       )}
@@ -164,7 +207,7 @@ export default function CalendarPage() {
             ))}
           </div>
 
-          {/* Selected-day detail (optional expand) */}
+          {/* Selected-day detail */}
           {selected && (
             <div className="mt-4 rounded-2xl bg-white p-4 shadow-sm">
               <div className="mb-2 flex items-center justify-between">
@@ -179,7 +222,7 @@ export default function CalendarPage() {
                 </button>
               </div>
 
-              {/* big-category summary for the day */}
+              {/* big-category + cash summary */}
               <div className="mb-3 flex flex-wrap gap-3">
                 {BIG_CATEGORIES.map((b) => {
                   const v = dayTotals.get(selected)?.[b.key] ?? 0;
@@ -192,27 +235,32 @@ export default function CalendarPage() {
                     </span>
                   );
                 })}
+                {dayCash.get(selected)?.given ? (
+                  <span className="text-xs font-semibold text-green-700">
+                    Received: {formatMoney(dayCash.get(selected)!.given)}
+                  </span>
+                ) : null}
+                {dayCash.get(selected)?.collected ? (
+                  <span className="text-xs font-semibold text-red-700">
+                    Returned: {formatMoney(dayCash.get(selected)!.collected)}
+                  </span>
+                ) : null}
               </div>
 
-              {selectedEntries.length === 0 ? (
+              {selectedExpenses.length === 0 && selectedCash.length === 0 ? (
                 <p className="py-4 text-center text-sm text-gray-400">
-                  No entries on this day.
+                  Nothing on this day.
                 </p>
               ) : (
                 <table className="w-full text-sm">
                   <tbody>
-                    {selectedEntries.map((e) => {
+                    {selectedExpenses.map((e) => {
                       const cat = CATEGORY_MAP[e.category];
                       return (
-                        <tr key={e.id} className="border-t border-gray-50">
+                        <tr key={`e${e.id}`} className="border-t border-gray-50">
                           <td className="py-2 text-gray-700">
                             <span className="mr-1">{cat?.emoji}</span>
                             {cat?.labelEn}
-                            {e.note && (
-                              <span className="mt-0.5 block text-xs text-gray-400">
-                                {e.note}
-                              </span>
-                            )}
                           </td>
                           <td className="py-2 text-right font-medium">
                             {formatMoney(e.amount)}
@@ -220,6 +268,21 @@ export default function CalendarPage() {
                         </tr>
                       );
                     })}
+                    {selectedCash.map((c) => (
+                      <tr key={`c${c.id}`} className="border-t border-gray-50">
+                        <td className="py-2 text-gray-700">
+                          {c.type === "given" ? "💵 Cash given" : "💵 Cash collected"}
+                        </td>
+                        <td
+                          className={`py-2 text-right font-medium ${
+                            c.type === "given" ? "text-green-700" : "text-red-700"
+                          }`}
+                        >
+                          {c.type === "given" ? "+" : "−"}
+                          {formatMoney(c.amount)}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               )}
