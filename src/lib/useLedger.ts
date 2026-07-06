@@ -1,10 +1,11 @@
 "use client";
 
-// One hook that loads expenses + cash transactions + settings together and
-// exposes the computed running balance plus all mutators. Used by every page
-// that needs the balance or cash data, so the balance is always consistent.
+// One hook that loads expenses + cash + settings + categories together and
+// exposes the computed balance, lookup maps, and all mutators. Every page reads
+// categories from here (which come from the DB), so Mum's edits show up
+// everywhere immediately.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   Expense,
   ExpenseInput,
@@ -12,6 +13,8 @@ import type {
   CashInput,
   Settings,
 } from "./types";
+import type { Category, BigCategory } from "./categories";
+import { buildCategoryMap, buildBigMap } from "./categories";
 import {
   fetchExpenses,
   createExpense,
@@ -23,6 +26,7 @@ import {
   fetchSettings,
   updateSettings,
   resetAllData,
+  fetchCategories,
 } from "./client";
 import { computeBalance } from "./balance";
 
@@ -38,20 +42,31 @@ export function useLedger() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [cash, setCash] = useState<CashTransaction[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [bigCategories, setBigCategories] = useState<BigCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const reloadCategories = useCallback(async () => {
+    const { categories: cats, bigCategories: bigs } = await fetchCategories();
+    setCategories(cats);
+    setBigCategories(bigs);
+  }, []);
 
   const reload = useCallback(async () => {
     try {
       setError(null);
-      const [e, c, s] = await Promise.all([
+      const [e, c, s, cat] = await Promise.all([
         fetchExpenses(),
         fetchCash(),
         fetchSettings(),
+        fetchCategories(),
       ]);
       setExpenses(e);
       setCash(c);
       setSettings(s);
+      setCategories(cat.categories);
+      setBigCategories(cat.bigCategories);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load data.");
     } finally {
@@ -70,14 +85,11 @@ export function useLedger() {
     return created;
   }, []);
 
-  const editExpense = useCallback(
-    async (id: number, input: Partial<ExpenseInput>) => {
-      const updated = await updateExpense(id, input);
-      setExpenses((p) => p.map((e) => (e.id === id ? updated : e)).sort(sortByDateDesc));
-      return updated;
-    },
-    []
-  );
+  const editExpense = useCallback(async (id: number, input: Partial<ExpenseInput>) => {
+    const updated = await updateExpense(id, input);
+    setExpenses((p) => p.map((e) => (e.id === id ? updated : e)).sort(sortByDateDesc));
+    return updated;
+  }, []);
 
   const removeExpense = useCallback(async (id: number) => {
     await deleteExpense(id);
@@ -96,14 +108,13 @@ export function useLedger() {
     setCash((p) => p.filter((c) => c.id !== id));
   }, []);
 
-  // ── settings ──
+  // ── settings + reset ──
   const saveSettings = useCallback(async (input: Partial<Settings>) => {
     const s = await updateSettings(input);
     setSettings(s);
     return s;
   }, []);
 
-  // ── destructive reset (keeps settings) ──
   const reset = useCallback(async () => {
     await resetAllData();
     setExpenses([]);
@@ -113,14 +124,27 @@ export function useLedger() {
   const openingBalance = settings?.opening_balance ?? 0;
   const balance = computeBalance(openingBalance, cash, expenses);
 
+  const categoryMap = useMemo(() => buildCategoryMap(categories), [categories]);
+  const bigMap = useMemo(() => buildBigMap(bigCategories), [bigCategories]);
+  const activeCategories = useMemo(
+    () => categories.filter((c) => c.isActive).sort((a, b) => a.sortOrder - b.sortOrder),
+    [categories]
+  );
+
   return {
     expenses,
     cash,
     settings,
+    categories,
+    bigCategories,
+    categoryMap,
+    bigMap,
+    activeCategories,
     balance,
     loading,
     error,
     reload,
+    reloadCategories,
     addExpense,
     editExpense,
     removeExpense,

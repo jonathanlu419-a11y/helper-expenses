@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { isCategoryKey } from "@/lib/categories";
+import { query } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // vision calls can take a few seconds
@@ -8,6 +8,7 @@ export const maxDuration = 60; // vision calls can take a few seconds
 // Per the claude-api reference: default to claude-opus-4-8 unless a model is
 // explicitly chosen. Vision + base64 image input, JSON-only prompt, parsed
 // defensively so an unreadable photo falls back to blank rather than erroring.
+// The category list is read from the DB so it always matches Mum's categories.
 const MODEL = "claude-opus-4-8";
 
 const ALLOWED_MEDIA = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -16,27 +17,6 @@ const SYSTEM =
   "You extract a single household expense from a photo (a shop receipt, or a " +
   "price-tagged food/market item) for a home expense tracker. Respond with " +
   "ONLY a JSON object — no preamble, no markdown, no code fences.";
-
-const PROMPT = `From the image, determine:
-
-1) "amount": the TOTAL price actually shown, as a number (e.g. 42.50). Rules:
-   - Use a receipt's TOTAL, or the clear total price printed on a single item's tag.
-   - If only a UNIT price is visible (e.g. "$8/kg", "$3 each") with no quantity or total, set amount to null.
-   - If the price is blurry/unreadable, missing, or there are multiple conflicting prices you cannot resolve, set amount to null.
-   - Never guess or invent a number.
-
-2) "category": your best guess of ONE category key from this list based on what is visible, or null if unclear. You MAY set a category even when amount is null.
-   - "household_cleaning": cleaning / household supplies (soap, detergent, tissue, etc.)
-   - "vegetables": fresh vegetables
-   - "fruits": fresh fruit
-   - "meat": meat, poultry, fish, seafood
-   - "rice_noodles": rice, noodles, pasta
-   - "other_food": other groceries / food staples (oil, spices, eggs, dairy, snacks, etc.)
-   - "transport": transport, fares, fuel
-
-3) "confidence_note": one short sentence on what you saw and any uncertainty.
-
-Return ONLY: {"amount": number|null, "category": string|null, "confidence_note": string}`;
 
 interface VisionResult {
   amount: number | null;
@@ -49,21 +29,17 @@ function blank(unavailable = false): VisionResult {
   return { amount: null, category: null, note: null, unavailable };
 }
 
-// Defensive parse: pull the first {...} block, validate every field, and never
-// throw — anything unexpected yields a blank result (form stays empty).
-function parseVision(text: string): VisionResult {
+function parseVision(text: string, validKeys: Set<string>): VisionResult {
   try {
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) return blank();
     const obj = JSON.parse(match[0]) as Record<string, unknown>;
-
     const amt = obj.amount;
     const amount =
       typeof amt === "number" && Number.isFinite(amt) && amt > 0 ? amt : null;
-
-    const category = isCategoryKey(obj.category) ? obj.category : null;
+    const category =
+      typeof obj.category === "string" && validKeys.has(obj.category) ? obj.category : null;
     const note = typeof obj.confidence_note === "string" ? obj.confidence_note : null;
-
     return { amount, category, note };
   } catch {
     return blank();
@@ -98,6 +74,30 @@ export async function POST(req: Request) {
   }
 
   try {
+    // Build the category choices from the live (active) category list.
+    const { rows } = await query(
+      `SELECT key, label_en FROM categories WHERE is_active = true ORDER BY sort_order, key`
+    );
+    const validKeys = new Set(rows.map((r) => String(r.key)));
+    const catList = rows
+      .map((r) => `   - "${r.key}": ${r.label_en}`)
+      .join("\n");
+
+    const prompt = `From the image, determine:
+
+1) "amount": the TOTAL price actually shown, as a number (e.g. 42.50). Rules:
+   - Use a receipt's TOTAL, or the clear total price printed on a single item's tag.
+   - If only a UNIT price is visible (e.g. "$8/kg", "$3 each") with no quantity or total, set amount to null.
+   - If the price is blurry/unreadable, missing, or there are multiple conflicting prices you cannot resolve, set amount to null.
+   - Never guess or invent a number.
+
+2) "category": your best guess of ONE category key from this list based on what is visible, or null if unclear. You MAY set a category even when amount is null.
+${catList}
+
+3) "confidence_note": one short sentence on what you saw and any uncertainty.
+
+Return ONLY: {"amount": number|null, "category": string|null, "confidence_note": string}`;
+
     const client = new Anthropic({ apiKey });
     const msg = await client.messages.create({
       model: MODEL,
@@ -115,17 +115,16 @@ export async function POST(req: Request) {
                 data: image,
               },
             },
-            { type: "text", text: PROMPT },
+            { type: "text", text: prompt },
           ],
         },
       ],
     });
 
     const text = msg.content.find((b) => b.type === "text")?.text ?? "";
-    return NextResponse.json(parseVision(text));
+    return NextResponse.json(parseVision(text, validKeys));
   } catch (err) {
     console.error("POST /api/vision failed:", err);
-    // Graceful fallback — the client leaves the form blank for manual entry.
     return NextResponse.json(blank(true), { status: 200 });
   }
 }

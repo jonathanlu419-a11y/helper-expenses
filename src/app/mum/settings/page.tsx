@@ -4,10 +4,21 @@ import { useEffect, useState } from "react";
 import { formatMoney } from "@/lib/format";
 import { useLedger } from "@/lib/useLedger";
 import MumTabs from "@/components/MumTabs";
+import ManageCategories from "@/components/ManageCategories";
 import Toast, { type ToastState } from "@/components/Toast";
 
 export default function MumSettingsPage() {
-  const { settings, balance, loading, error, saveSettings, reset } = useLedger();
+  const {
+    settings,
+    balance,
+    categories,
+    bigCategories,
+    reloadCategories,
+    loading,
+    error,
+    saveSettings,
+    reset,
+  } = useLedger();
   const [opening, setOpening] = useState("");
   const [firstDate, setFirstDate] = useState("");
   const [initialized, setInitialized] = useState(false);
@@ -142,6 +153,14 @@ export default function MumSettingsPage() {
           >
             {savingSettings ? "Saving…" : "Save settings"}
           </button>
+
+          {/* Manage categories + big categories */}
+          <ManageCategories
+            categories={categories}
+            bigCategories={bigCategories}
+            reload={reloadCategories}
+            onToast={(message, kind) => setToast({ message, kind })}
+          />
 
           {/* Danger zone */}
           <section className="rounded-2xl border-2 border-red-200 bg-red-50 p-4">

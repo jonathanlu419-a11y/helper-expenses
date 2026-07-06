@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { query, mapExpenseRow } from "@/lib/db";
-import { isCategoryKey } from "@/lib/categories";
+import { query, mapExpenseRow, categoryExists } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -32,10 +31,10 @@ export async function PATCH(
   // Validate only the fields that were actually provided.
   let categoryVal: string | null = null;
   if (category !== undefined) {
-    if (!isCategoryKey(category)) {
-      return NextResponse.json({ error: "Invalid category" }, { status: 400 });
+    if (!(await categoryExists(category))) {
+      return NextResponse.json({ error: "Unknown category" }, { status: 400 });
     }
-    categoryVal = category;
+    categoryVal = category as string;
   }
 
   let amountVal: number | null = null;

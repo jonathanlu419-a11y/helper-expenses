@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { query, EXPENSE_COLUMNS, mapExpenseRow } from "@/lib/db";
-import { isCategoryKey } from "@/lib/categories";
+import { query, EXPENSE_COLUMNS, mapExpenseRow, categoryExists } from "@/lib/db";
 import { todayISO } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
@@ -29,8 +28,8 @@ export async function POST(req: Request) {
 
   const { category, amount, entry_date, note } = (body ?? {}) as Record<string, unknown>;
 
-  if (!isCategoryKey(category)) {
-    return NextResponse.json({ error: "Invalid category" }, { status: 400 });
+  if (!(await categoryExists(category))) {
+    return NextResponse.json({ error: "Unknown category" }, { status: 400 });
   }
 
   const amt = Number(amount);

@@ -71,7 +71,7 @@ Only one is required:
 | Variable | Required | Notes |
 |---|---|---|
 | `DATABASE_URL` | ✅ | Neon **pooled** connection string. Used by the app (`pg`) and by `npm run db:setup`. Note: the Vercel↔Neon integration also injects prefixed vars (e.g. `helper_expenses_tracking_DATABASE_URL`), but the app reads the plain `DATABASE_URL` — set that explicitly. |
-| `ANTHROPIC_API_KEY` | ⬜ optional | Enables the **📷 camera Quick Add** on `/worker` (Claude vision). If unset, the camera button is hidden and manual entry still works. Server-side only — never exposed to the browser. |
+| `ANTHROPIC_API_KEY` | ⬜ optional | Enables the **📷 camera Quick Add** on `/worker` (Claude vision) **and** auto-translation of category labels (English → Indonesian) in Manage Categories. If unset, the camera button is hidden and the Indonesian label is left blank for manual entry. Server-side only. |
 
 ---
 
@@ -96,7 +96,9 @@ The table is created with `IF NOT EXISTS`, so re-running the setup is safe.
 
 ## Data model
 
-Single `expenses` table — see [`db/schema.sql`](db/schema.sql):
+Categories are **Mum-managed** and stored in the DB (`categories` + `big_categories` tables), not hardcoded — see [`db/schema.sql`](db/schema.sql). Every category rolls up into exactly one big category (FK, not-null); a permanent `other`/"Lainnya" fallback big category can't be deleted. Removing a category that has entries soft-deletes it (hidden from Quick Add, still shown in history); one with no entries is hard-deleted. All UI reads categories from `GET /api/categories`, so edits reflect everywhere immediately.
+
+Core `expenses` table — see [`db/schema.sql`](db/schema.sql):
 
 | Column | Type | Notes |
 |---|---|---|

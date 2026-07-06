@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { CATEGORIES, CATEGORY_MAP } from "@/lib/categories";
 import { formatMoney, formatDateShort } from "@/lib/format";
 import type { ExpenseInput, CashInput } from "@/lib/types";
 import { useLedger } from "@/lib/useLedger";
@@ -17,6 +16,9 @@ export default function MumPage() {
     expenses,
     cash,
     settings,
+    categories,
+    activeCategories,
+    categoryMap,
     balance,
     loading,
     error,
@@ -40,14 +42,22 @@ export default function MumPage() {
   );
   const totals = useMemo(() => {
     const map = new Map<string, number>();
-    for (const c of CATEGORIES) map.set(c.key, 0);
     for (const e of inRange) map.set(e.category, (map.get(e.category) ?? 0) + e.amount);
     return map;
   }, [inRange]);
+  // Show all active categories, plus any inactive one that still has spend in
+  // this period (so historical categories aren't hidden).
+  const breakdownCats = useMemo(() => {
+    const byKey = new Map(activeCategories.map((c) => [c.key, c]));
+    for (const key of totals.keys()) {
+      if (!byKey.has(key) && categoryMap[key]) byKey.set(key, categoryMap[key]);
+    }
+    return Array.from(byKey.values()).sort((a, b) => a.sortOrder - b.sortOrder);
+  }, [activeCategories, totals, categoryMap]);
   const grandTotal = useMemo(() => inRange.reduce((s, e) => s + e.amount, 0), [inRange]);
   const maxCat = useMemo(
-    () => Math.max(1, ...CATEGORIES.map((c) => totals.get(c.key) ?? 0)),
-    [totals]
+    () => Math.max(1, ...breakdownCats.map((c) => totals.get(c.key) ?? 0)),
+    [breakdownCats, totals]
   );
 
   // 3 most recent activities (expenses + cash mixed), newest first.
@@ -104,8 +114,8 @@ export default function MumPage() {
                   item.kind === "expense" ? (
                     <li key={`e${item.e.id}`} className="flex items-center justify-between py-2">
                       <span className="text-sm text-gray-700">
-                        <span className="mr-1">{CATEGORY_MAP[item.e.category]?.emoji}</span>
-                        {CATEGORY_MAP[item.e.category]?.labelEn}
+                        <span className="mr-1">{categoryMap[item.e.category]?.emoji}</span>
+                        {categoryMap[item.e.category]?.labelEn ?? item.e.category}
                       </span>
                       <span className="flex items-center gap-3">
                         <span className="text-xs text-gray-400">{formatDateShort(item.date)}</span>
@@ -185,7 +195,7 @@ export default function MumPage() {
 
           {/* Category breakdown with bars */}
           <div className="space-y-3">
-            {CATEGORIES.map((c) => {
+            {breakdownCats.map((c) => {
               const val = totals.get(c.key) ?? 0;
               const pct = (val / maxCat) * 100;
               return (
@@ -222,6 +232,7 @@ export default function MumPage() {
       {quickAdd && (
         <QuickAddSheet
           onClose={() => setQuickAdd(false)}
+          categories={categories}
           onSubmitExpense={handleAddExpense}
           onSubmitCash={handleAddCash}
           minDate={settings?.first_activity_date}

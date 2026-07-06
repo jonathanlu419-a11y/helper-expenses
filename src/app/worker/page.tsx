@@ -13,6 +13,8 @@ export default function WorkerPage() {
     expenses,
     cash,
     settings,
+    categories,
+    categoryMap,
     balance,
     loading,
     error,
@@ -95,6 +97,7 @@ export default function WorkerPage() {
                 cash={cash}
                 openingBalance={settings?.opening_balance ?? 0}
                 lang="id"
+                categoryMap={categoryMap}
                 onEditExpense={(e) => setSheet({ mode: "edit", expense: e })}
                 onDeleteExpense={handleDelete}
               />
@@ -116,6 +119,7 @@ export default function WorkerPage() {
         <ExpenseSheet
           mode={sheet.mode}
           lang="id"
+          categories={categories}
           initial={sheet.mode === "edit" ? sheet.expense : undefined}
           minDate={settings?.first_activity_date}
           onClose={() => setSheet(null)}

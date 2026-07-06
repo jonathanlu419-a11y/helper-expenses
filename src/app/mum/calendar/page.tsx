@@ -1,12 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  BIG_CATEGORIES,
-  BIG_CATEGORY_OF,
-  CATEGORY_MAP,
-  type BigCategoryKey,
-} from "@/lib/categories";
+import { bigColor } from "@/lib/categories";
 import { formatMoney, formatDateShort } from "@/lib/format";
 import { useLedger } from "@/lib/useLedger";
 import { getMonthGrid, monthStartISO } from "@/lib/time";
@@ -14,18 +9,14 @@ import MumTabs from "@/components/MumTabs";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-type BigTotals = Record<BigCategoryKey, number>;
 interface DayCash {
   given: number;
   collected: number;
 }
 
-function emptyTotals(): BigTotals {
-  return { food: 0, transport: 0, household: 0 };
-}
-
 export default function CalendarPage() {
-  const { expenses, cash, settings, loading, error } = useLedger();
+  const { expenses, cash, settings, categories, categoryMap, bigCategories, bigMap, loading, error } =
+    useLedger();
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -35,28 +26,43 @@ export default function CalendarPage() {
   const firstActivity = settings?.first_activity_date ?? null;
   const canGoPrev = useMemo(() => {
     if (!firstActivity) return true;
-    const firstMonth = firstActivity.slice(0, 7); // YYYY-MM
-    const prevMonth = monthStartISO(offset - 1).slice(0, 7);
-    return prevMonth >= firstMonth;
+    return monthStartISO(offset - 1).slice(0, 7) >= firstActivity.slice(0, 7);
   }, [firstActivity, offset]);
 
-  // entry_date → per-big-category expense totals.
+  // Big categories to show: active ones that have at least one active category
+  // OR any historical spend rolling into them (so nothing is hidden).
+  const displayedBigs = useMemo(() => {
+    const withActive = new Set(categories.filter((c) => c.isActive).map((c) => c.bigCategory));
+    const withSpend = new Set(
+      expenses.map((e) => categoryMap[e.category]?.bigCategory).filter(Boolean) as string[]
+    );
+    return bigCategories
+      .filter((b) => b.isActive && (withActive.has(b.key) || withSpend.has(b.key)))
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+  }, [categories, bigCategories, expenses, categoryMap]);
+
+  const colorFor = useMemo(() => {
+    const m = new Map<string, ReturnType<typeof bigColor>>();
+    displayedBigs.forEach((b, i) => m.set(b.key, bigColor(i)));
+    return m;
+  }, [displayedBigs]);
+
+  // entry_date → { bigKey: total }
   const dayTotals = useMemo(() => {
-    const map = new Map<string, BigTotals>();
+    const map = new Map<string, Record<string, number>>();
     for (const e of expenses) {
-      const big = BIG_CATEGORY_OF[e.category];
+      const big = categoryMap[e.category]?.bigCategory;
       if (!big) continue;
       let rec = map.get(e.entry_date);
       if (!rec) {
-        rec = emptyTotals();
+        rec = {};
         map.set(e.entry_date, rec);
       }
-      rec[big] += e.amount;
+      rec[big] = (rec[big] ?? 0) + e.amount;
     }
     return map;
-  }, [expenses]);
+  }, [expenses, categoryMap]);
 
-  // entry_date → cash movement.
   const dayCash = useMemo(() => {
     const map = new Map<string, DayCash>();
     for (const c of cash) {
@@ -87,21 +93,17 @@ export default function CalendarPage() {
         <MumTabs active="calendar" />
       </header>
 
-      {/* Legend */}
-      <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
-        {BIG_CATEGORIES.map((b) => (
+      {/* Legend — one entry per active big category (dynamic) + cash */}
+      <div className="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
+        {displayedBigs.map((b) => (
           <span key={b.key} className="flex items-center gap-1">
-            <span>{b.emoji}</span>
-            <span className={`font-medium ${b.colorClass}`}>{b.labelEn}</span>
+            <span className={`h-2 w-2 rounded-full ${colorFor.get(b.key)?.bar}`} />
+            <span className={`font-medium ${colorFor.get(b.key)?.text}`}>{b.labelEn}</span>
           </span>
         ))}
         <span className="flex items-center gap-1">
-          <span className="rounded bg-green-100 px-1 font-medium text-green-700">
-            +$ given
-          </span>
-          <span className="rounded bg-red-100 px-1 font-medium text-red-700">
-            −$ collected
-          </span>
+          <span className="rounded bg-green-100 px-1 font-medium text-green-700">+$ given</span>
+          <span className="rounded bg-red-100 px-1 font-medium text-red-700">−$ collected</span>
         </span>
       </div>
 
@@ -156,9 +158,7 @@ export default function CalendarPage() {
                   return (
                     <button
                       key={cell.iso}
-                      onClick={() =>
-                        setSelected((s) => (s === cell.iso ? null : cell.iso))
-                      }
+                      onClick={() => setSelected((s) => (s === cell.iso ? null : cell.iso))}
                       className={`m-0.5 flex min-h-[72px] flex-col rounded-lg border p-1 text-left transition ${
                         isSel ? "border-slate-800 bg-slate-50" : "border-transparent"
                       } ${cell.inMonth ? "bg-gray-50" : "bg-transparent"}`}
@@ -177,13 +177,12 @@ export default function CalendarPage() {
                       {cell.inMonth && (
                         <span className="mt-0.5 flex flex-col gap-[1px] leading-tight">
                           {totals &&
-                            BIG_CATEGORIES.map((b) =>
+                            displayedBigs.map((b) =>
                               totals[b.key] > 0 ? (
                                 <span
                                   key={b.key}
-                                  className={`text-[9px] font-medium ${b.colorClass}`}
+                                  className={`text-[9px] font-semibold ${colorFor.get(b.key)?.text}`}
                                 >
-                                  {b.emoji}
                                   {Math.round(totals[b.key])}
                                 </span>
                               ) : null
@@ -214,23 +213,18 @@ export default function CalendarPage() {
                 <h2 className="text-sm font-semibold text-gray-700">
                   {formatDateShort(selected)}
                 </h2>
-                <button
-                  onClick={() => setSelected(null)}
-                  className="text-xs text-gray-400"
-                >
+                <button onClick={() => setSelected(null)} className="text-xs text-gray-400">
                   Close
                 </button>
               </div>
 
-              {/* big-category + cash summary */}
               <div className="mb-3 flex flex-wrap gap-3">
-                {BIG_CATEGORIES.map((b) => {
+                {displayedBigs.map((b) => {
                   const v = dayTotals.get(selected)?.[b.key] ?? 0;
                   return (
                     <span key={b.key} className="text-xs">
-                      <span className="mr-1">{b.emoji}</span>
-                      <span className={`font-semibold ${b.colorClass}`}>
-                        {formatMoney(v)}
+                      <span className={`font-semibold ${colorFor.get(b.key)?.text}`}>
+                        {b.labelEn}: {formatMoney(v)}
                       </span>
                     </span>
                   );
@@ -248,23 +242,23 @@ export default function CalendarPage() {
               </div>
 
               {selectedExpenses.length === 0 && selectedCash.length === 0 ? (
-                <p className="py-4 text-center text-sm text-gray-400">
-                  Nothing on this day.
-                </p>
+                <p className="py-4 text-center text-sm text-gray-400">Nothing on this day.</p>
               ) : (
                 <table className="w-full text-sm">
                   <tbody>
                     {selectedExpenses.map((e) => {
-                      const cat = CATEGORY_MAP[e.category];
+                      const cat = categoryMap[e.category];
+                      const big = cat ? bigMap[cat.bigCategory] : undefined;
                       return (
                         <tr key={`e${e.id}`} className="border-t border-gray-50">
                           <td className="py-2 text-gray-700">
                             <span className="mr-1">{cat?.emoji}</span>
-                            {cat?.labelEn}
+                            {cat?.labelEn ?? e.category}
+                            {big && (
+                              <span className="ml-1 text-xs text-gray-400">· {big.labelEn}</span>
+                            )}
                           </td>
-                          <td className="py-2 text-right font-medium">
-                            {formatMoney(e.amount)}
-                          </td>
+                          <td className="py-2 text-right font-medium">{formatMoney(e.amount)}</td>
                         </tr>
                       );
                     })}

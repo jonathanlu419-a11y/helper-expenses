@@ -14,6 +14,8 @@ export default function MumEntriesPage() {
     expenses,
     cash,
     settings,
+    categories,
+    categoryMap,
     loading,
     error,
     reload,
@@ -94,6 +96,7 @@ export default function MumEntriesPage() {
           cash={cash}
           openingBalance={settings?.opening_balance ?? 0}
           lang="en"
+          categoryMap={categoryMap}
           onEditExpense={setEdit}
           onDeleteExpense={handleDeleteExpense}
           onDeleteCash={handleDeleteCash}
@@ -112,6 +115,7 @@ export default function MumEntriesPage() {
       {quickAdd && (
         <QuickAddSheet
           onClose={() => setQuickAdd(false)}
+          categories={categories}
           onSubmitExpense={handleAddExpense}
           onSubmitCash={handleAddCash}
           minDate={settings?.first_activity_date}
@@ -122,6 +126,7 @@ export default function MumEntriesPage() {
         <ExpenseSheet
           mode="edit"
           lang="en"
+          categories={categories}
           initial={edit}
           minDate={settings?.first_activity_date}
           onClose={() => setEdit(null)}

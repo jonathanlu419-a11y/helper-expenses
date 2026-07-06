@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CATEGORIES, type CategoryKey } from "@/lib/categories";
+import type { Category, CategoryKey } from "@/lib/categories";
 import { todayISO } from "@/lib/time";
 import type { Expense, ExpenseInput } from "@/lib/types";
 import { resizeImageFile } from "@/lib/image";
@@ -64,6 +64,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
 export default function ExpenseSheet({
   mode,
   lang,
+  categories,
   initial,
   onClose,
   onSubmit,
@@ -71,14 +72,17 @@ export default function ExpenseSheet({
 }: {
   mode: "add" | "edit";
   lang: Lang;
+  categories: Category[];
   initial?: Expense;
   onClose: () => void;
   onSubmit: (input: ExpenseInput) => Promise<void>;
   minDate?: string | null;
 }) {
   const t = STRINGS[lang];
-  const catLabel = (c: (typeof CATEGORIES)[number]) =>
-    lang === "id" ? c.labelId : c.labelEn;
+  const catLabel = (c: Category) => (lang === "id" ? c.labelId : c.labelEn);
+  const activeCats = categories
+    .filter((c) => c.isActive)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
 
   const [category, setCategory] = useState<CategoryKey | null>(
     initial?.category ?? null
@@ -176,7 +180,7 @@ export default function ExpenseSheet({
   }
 
   const title = mode === "add" ? t.addTitle : t.editTitle;
-  const selected = CATEGORIES.find((c) => c.key === category);
+  const selected = categories.find((c) => c.key === category);
 
   return (
     <div
@@ -232,7 +236,7 @@ export default function ExpenseSheet({
 
             <p className="mb-3 text-sm text-gray-500">{t.pickCategory}</p>
             <div className="grid grid-cols-2 gap-3">
-              {CATEGORIES.map((c) => (
+              {activeCats.map((c) => (
                 <button
                   key={c.key}
                   onClick={() => pickCategory(c.key)}

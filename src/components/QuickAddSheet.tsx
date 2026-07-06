@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CATEGORIES, type CategoryKey } from "@/lib/categories";
+import type { Category, CategoryKey } from "@/lib/categories";
 import { todayISO } from "@/lib/time";
 import type { ExpenseInput, CashInput, CashType } from "@/lib/types";
 
@@ -10,16 +10,21 @@ import type { ExpenseInput, CashInput, CashType } from "@/lib/types";
 
 export default function QuickAddSheet({
   onClose,
+  categories,
   onSubmitExpense,
   onSubmitCash,
   minDate,
 }: {
   onClose: () => void;
+  categories: Category[];
   onSubmitExpense: (input: ExpenseInput) => Promise<void>;
   onSubmitCash: (input: CashInput) => Promise<void>;
   minDate?: string | null;
 }) {
   const [tab, setTab] = useState<"expense" | "cash">("expense");
+  const activeCats = categories
+    .filter((c) => c.isActive)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
 
   // expense state
   const [category, setCategory] = useState<CategoryKey | null>(null);
@@ -103,7 +108,7 @@ export default function QuickAddSheet({
           <div>
             <p className="mb-2 text-sm text-gray-500">Category</p>
             <div className="mb-4 grid grid-cols-2 gap-2">
-              {CATEGORIES.map((c) => (
+              {activeCats.map((c) => (
                 <button
                   key={c.key}
                   onClick={() => setCategory(c.key)}

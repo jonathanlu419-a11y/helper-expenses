@@ -6,7 +6,7 @@
 
 import { Pool, type QueryResult, type QueryResultRow } from "pg";
 import type { Expense, CashTransaction, CashType, Settings } from "./types";
-import type { CategoryKey } from "./categories";
+import type { CategoryKey, Category, BigCategory } from "./categories";
 
 let pool: Pool | null = null;
 
@@ -90,5 +90,39 @@ export function mapSettingsRow(row: QueryResultRow): Settings {
     first_activity_date: row.first_activity_date
       ? String(row.first_activity_date)
       : null,
+  };
+}
+
+/** Whether a category key exists (active or not) — for validating expense writes. */
+export async function categoryExists(key: unknown): Promise<boolean> {
+  if (typeof key !== "string" || key.trim() === "") return false;
+  const { rowCount } = await query(`SELECT 1 FROM categories WHERE key = $1`, [key]);
+  return Boolean(rowCount);
+}
+
+export const CATEGORY_COLUMNS = `key, emoji, label_id, label_en, big_category, sort_order, is_active`;
+
+export function mapCategoryRow(row: QueryResultRow): Category {
+  return {
+    key: String(row.key),
+    emoji: String(row.emoji ?? "🧾"),
+    labelId: String(row.label_id ?? ""),
+    labelEn: String(row.label_en ?? ""),
+    bigCategory: String(row.big_category),
+    sortOrder: Number(row.sort_order),
+    isActive: Boolean(row.is_active),
+  };
+}
+
+export const BIG_CATEGORY_COLUMNS = `key, label_en, label_id, sort_order, is_active, is_fallback`;
+
+export function mapBigCategoryRow(row: QueryResultRow): BigCategory {
+  return {
+    key: String(row.key),
+    labelEn: String(row.label_en ?? ""),
+    labelId: String(row.label_id ?? ""),
+    sortOrder: Number(row.sort_order),
+    isActive: Boolean(row.is_active),
+    isFallback: Boolean(row.is_fallback),
   };
 }

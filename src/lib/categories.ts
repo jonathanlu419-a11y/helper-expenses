@@ -1,88 +1,59 @@
-// The 7 fixed categories for the MVP.
-// `key` is the internal English value stored in the database.
-// `labelId` is the Bahasa Indonesia label shown to the worker.
-// `labelEn` is the English label shown on Mum's dashboard.
+// Category TYPES and display helpers only. The actual category data now lives
+// in the database (`categories` + `big_categories` tables) and is fetched via
+// GET /api/categories, so Mum's edits are reflected everywhere immediately.
+// Keys are dynamic strings.
 
-export type CategoryKey =
-  | "household_cleaning"
-  | "vegetables"
-  | "fruits"
-  | "meat"
-  | "rice_noodles"
-  | "other_food"
-  | "transport";
+export type CategoryKey = string;
+export type BigCategoryKey = string;
 
 export interface Category {
   key: CategoryKey;
   emoji: string;
   labelId: string;
   labelEn: string;
+  bigCategory: BigCategoryKey;
+  sortOrder: number;
+  isActive: boolean;
 }
-
-export const CATEGORIES: Category[] = [
-  { key: "household_cleaning", emoji: "🧹", labelId: "Kebutuhan Rumah Tangga", labelEn: "Household & Cleaning Supplies" },
-  { key: "vegetables", emoji: "🥬", labelId: "Sayuran", labelEn: "Vegetables" },
-  { key: "fruits", emoji: "🍎", labelId: "Buah-buahan", labelEn: "Fruits" },
-  { key: "meat", emoji: "🥩", labelId: "Daging", labelEn: "Meat" },
-  { key: "rice_noodles", emoji: "🍚", labelId: "Beras & Mie", labelEn: "Rice & Noodles" },
-  { key: "other_food", emoji: "🧂", labelId: "Bahan Makanan Lain", labelEn: "Other Food Items" },
-  { key: "transport", emoji: "🚗", labelId: "Transportasi", labelEn: "Transportation" },
-];
-
-export const CATEGORY_KEYS: CategoryKey[] = CATEGORIES.map((c) => c.key);
-
-export const CATEGORY_MAP: Record<CategoryKey, Category> = Object.fromEntries(
-  CATEGORIES.map((c) => [c.key, c])
-) as Record<CategoryKey, Category>;
-
-export function isCategoryKey(value: unknown): value is CategoryKey {
-  return typeof value === "string" && (CATEGORY_KEYS as string[]).includes(value);
-}
-
-// ── Rolled-up "big" categories ────────────────────────────────
-// A coarser 3-group view used only by the /mum calendar. The underlying
-// 7-category data/schema is unchanged; this just groups the fine keys.
-//   Food      = vegetables + fruits + meat + rice_noodles + other_food (sembako)
-//   Transport = transport
-//   Household  = household_cleaning
-
-export type BigCategoryKey = "food" | "transport" | "household";
 
 export interface BigCategory {
   key: BigCategoryKey;
   labelEn: string;
-  emoji: string;
-  /** Tailwind text-color class for compact displays. */
-  colorClass: string;
-  members: CategoryKey[];
+  labelId: string;
+  sortOrder: number;
+  isActive: boolean;
+  isFallback: boolean;
 }
 
-export const BIG_CATEGORIES: BigCategory[] = [
-  {
-    key: "food",
-    labelEn: "Food",
-    emoji: "🍽️",
-    colorClass: "text-green-600",
-    members: ["vegetables", "fruits", "meat", "rice_noodles", "other_food"],
-  },
-  {
-    key: "transport",
-    labelEn: "Transport",
-    emoji: "🚗",
-    colorClass: "text-blue-600",
-    members: ["transport"],
-  },
-  {
-    key: "household",
-    labelEn: "Household",
-    emoji: "🧹",
-    colorClass: "text-amber-600",
-    members: ["household_cleaning"],
-  },
+// Deterministic color set per big category, chosen by position. Class strings
+// are literals so Tailwind keeps them in the build.
+const BIG_COLORS = [
+  { text: "text-emerald-600", badge: "bg-emerald-100 text-emerald-700", bar: "bg-emerald-500" },
+  { text: "text-blue-600", badge: "bg-blue-100 text-blue-700", bar: "bg-blue-500" },
+  { text: "text-amber-600", badge: "bg-amber-100 text-amber-700", bar: "bg-amber-500" },
+  { text: "text-violet-600", badge: "bg-violet-100 text-violet-700", bar: "bg-violet-500" },
+  { text: "text-rose-600", badge: "bg-rose-100 text-rose-700", bar: "bg-rose-500" },
+  { text: "text-cyan-600", badge: "bg-cyan-100 text-cyan-700", bar: "bg-cyan-500" },
+  { text: "text-lime-600", badge: "bg-lime-100 text-lime-700", bar: "bg-lime-500" },
+  { text: "text-fuchsia-600", badge: "bg-fuchsia-100 text-fuchsia-700", bar: "bg-fuchsia-500" },
 ];
 
-/** Reverse lookup: fine category key → big category key. */
-export const BIG_CATEGORY_OF: Record<CategoryKey, BigCategoryKey> =
-  Object.fromEntries(
-    BIG_CATEGORIES.flatMap((b) => b.members.map((m) => [m, b.key]))
-  ) as Record<CategoryKey, BigCategoryKey>;
+export function bigColor(index: number) {
+  return BIG_COLORS[((index % BIG_COLORS.length) + BIG_COLORS.length) % BIG_COLORS.length];
+}
+
+/** key → Category lookup (includes inactive, so historical entries still render). */
+export function buildCategoryMap(cats: Category[]): Record<string, Category> {
+  return Object.fromEntries(cats.map((c) => [c.key, c]));
+}
+
+/** key → BigCategory lookup. */
+export function buildBigMap(bigs: BigCategory[]): Record<string, BigCategory> {
+  return Object.fromEntries(bigs.map((b) => [b.key, b]));
+}
+
+/** Localized label for a category, tolerant of a missing/unknown key. */
+export function catLabel(cat: Category | undefined, lang: "id" | "en"): string {
+  if (!cat) return "—";
+  return (lang === "id" ? cat.labelId : cat.labelEn) || cat.labelEn || cat.key;
+}

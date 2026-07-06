@@ -1,6 +1,6 @@
 "use client";
 
-import { CATEGORY_MAP } from "@/lib/categories";
+import type { Category } from "@/lib/categories";
 import { formatMoney, formatDayHeader } from "@/lib/format";
 import { sumExpenses } from "@/lib/balance";
 import type { Expense, CashTransaction } from "@/lib/types";
@@ -33,6 +33,7 @@ export default function DayGroupedEntries({
   cash,
   openingBalance,
   lang,
+  categoryMap,
   onEditExpense,
   onDeleteExpense,
   onDeleteCash,
@@ -41,6 +42,7 @@ export default function DayGroupedEntries({
   cash: CashTransaction[];
   openingBalance: number;
   lang: Lang;
+  categoryMap: Record<string, Category>;
   onEditExpense: (e: Expense) => void;
   onDeleteExpense: (e: Expense) => void;
   onDeleteCash?: (c: CashTransaction) => void;
@@ -103,6 +105,7 @@ export default function DayGroupedEntries({
                       key={`e${row.e.id}`}
                       exp={row.e}
                       lang={lang}
+                      categoryMap={categoryMap}
                       onEdit={onEditExpense}
                       onDelete={onDeleteExpense}
                     />
@@ -127,15 +130,17 @@ export default function DayGroupedEntries({
 function ExpenseRow({
   exp,
   lang,
+  categoryMap,
   onEdit,
   onDelete,
 }: {
   exp: Expense;
   lang: Lang;
+  categoryMap: Record<string, Category>;
   onEdit: (e: Expense) => void;
   onDelete: (e: Expense) => void;
 }) {
-  const cat = CATEGORY_MAP[exp.category];
+  const cat = categoryMap[exp.category];
   const label = lang === "id" ? cat?.labelId : cat?.labelEn;
   return (
     <tr className="border-b border-gray-50 last:border-0">
