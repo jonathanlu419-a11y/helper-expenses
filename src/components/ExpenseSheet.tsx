@@ -13,7 +13,7 @@ export type Lang = "id" | "en";
 // Copy switches on `lang`: "id" (Bahasa Indonesia, worker) or "en" (Mum).
 //
 // - "add" mode is a 2-step flow: pick a category, then enter the amount.
-//   In add mode it also offers a camera option ("Ambil Foto") that uses Claude
+//   In add mode it also offers a camera option ("Ambil Foto") that uses Gemini
 //   vision to PREFILL the category/amount from a receipt or price tag — the
 //   helper always reviews and confirms before saving (never auto-submitted).
 // - "edit" mode shows everything on one screen, pre-filled.

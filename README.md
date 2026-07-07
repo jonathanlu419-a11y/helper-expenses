@@ -2,7 +2,7 @@
 
 A tiny two-page household spending tracker.
 
-- **`/worker`** — Bahasa Indonesia quick-entry screen for the domestic helper. A floating **+** button opens a 2-step sheet (pick category → enter amount), and every entry is listed in a table that can be edited or deleted. The Quick Add sheet also has a **📷 Ambil Foto** option: the helper photographs a receipt or a price-tagged item, and **Claude vision** prefills the category and amount for her to review (never auto-saved). If the price can't be read confidently (unit price only, blurry, missing), the amount is left blank for manual entry.
+- **`/worker`** — Bahasa Indonesia quick-entry screen for the domestic helper. A floating **+** button opens a 2-step sheet (pick category → enter amount), and every entry is listed in a table that can be edited or deleted. The Quick Add sheet also has a **📷 Ambil Foto** option: the helper photographs a receipt or a price-tagged item, and **Gemini vision** prefills the category and amount for her to review (never auto-saved). If the price can't be read confidently (unit price only, blurry, missing), the amount is left blank for manual entry.
 - **`/mum`** — English dashboard for the employer. Toggle **Weekly / Monthly**, step through periods, and see per-category totals (with bars), a grand total, and the entries. Mum can also add (its own English **+** button), edit, and delete entries.
 - **`/mum/calendar`** — month-view calendar (linked from the dashboard sub-nav). Each day cell shows that day's totals rolled up into **3 big categories** — Food / Transport / Household — with prev/next month navigation and a tap-to-expand day detail. The roll-up is view-only; the underlying 7-category data is unchanged.
 
