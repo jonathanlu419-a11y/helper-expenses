@@ -101,7 +101,7 @@ Return ONLY: {"amount": number|null, "category": string|null, "confidence_note":
         { inline_data: { mime_type: media_type, data: image } },
         { text: prompt },
       ],
-      maxOutputTokens: 300,
+      maxOutputTokens: 500,
     });
 
     return NextResponse.json(parseVision(text, validKeys));

@@ -34,7 +34,7 @@ export async function POST(req: Request) {
           text: `Translate to concise, natural everyday Bahasa Indonesia (household/grocery context): "${text.trim()}"`,
         },
       ],
-      maxOutputTokens: 60,
+      maxOutputTokens: 200,
     });
     const label = out.trim().replace(/^["'`]+|["'`.]+$/g, "").trim();
     return NextResponse.json({ label_id: label || null });
