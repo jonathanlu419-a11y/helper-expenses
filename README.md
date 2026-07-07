@@ -71,7 +71,7 @@ Only one is required:
 | Variable | Required | Notes |
 |---|---|---|
 | `DATABASE_URL` | ✅ | Neon **pooled** connection string. Used by the app (`pg`) and by `npm run db:setup`. Note: the Vercel↔Neon integration also injects prefixed vars (e.g. `helper_expenses_tracking_DATABASE_URL`), but the app reads the plain `DATABASE_URL` — set that explicitly. |
-| `ANTHROPIC_API_KEY` | ⬜ optional | Enables the **📷 camera Quick Add** on `/worker` (Claude vision) **and** auto-translation of category labels (English → Indonesian) in Manage Categories. If unset, the camera button is hidden and the Indonesian label is left blank for manual entry. Server-side only. |
+| `GEMINI_API_KEY` | ⬜ optional | Enables the **📷 camera Quick Add** on `/worker` (Gemini vision) **and** auto-translation of category labels (English → Indonesian) in Manage Categories. If unset, the camera button is hidden and the Indonesian label is left blank for manual entry. Server-side only. Get a key at [Google AI Studio](https://aistudio.google.com/apikey). |
 
 ---
 
@@ -127,4 +127,5 @@ Core `expenses` table — see [`db/schema.sql`](db/schema.sql):
 - **No auth** — both routes are public (MVP). If you later want to deter random URL hits, add a lightweight PIN gate.
 - **No currency logic** — amounts are plain numbers shown with a `$` prefix.
 - The `note` field exists in the schema/API but has no input in the entry UI for the MVP; if a note is present it's shown under the category.
-- **Camera Quick Add (vision):** uses `claude-opus-4-8` via `@anthropic-ai/sdk` in the `/api/vision` route. The photo is **downscaled in the browser, sent for one-shot extraction, and never stored** — not in the database, not in any file/blob storage — to keep infra simple and avoid privacy/storage concerns. The model is prompted to return `{amount, category, confidence_note}` as JSON and is instructed to return `amount: null` rather than guess when the price isn't clearly readable; the route parses defensively and falls back to a blank form on any failure.
+- **Camera Quick Add (vision):** uses Google's `gemini-2.5-flash` (Generative Language REST API, via a raw `fetch` wrapper in [`src/lib/gemini.ts`](src/lib/gemini.ts) — no SDK dependency) in the `/api/vision` route. The photo is **downscaled in the browser, sent for one-shot extraction, and never stored** — not in the database, not in any file/blob storage — to keep infra simple and avoid privacy/storage concerns. The model is prompted to return `{amount, category, confidence_note}` as JSON and is instructed to return `amount: null` rather than guess when the price isn't clearly readable; the route parses defensively and falls back to a blank form on any failure.
+- **Category label auto-translation** also uses `gemini-2.5-flash` (same `src/lib/gemini.ts` helper) in the `/api/translate` route — Mum always reviews/edits the suggested Indonesian label before saving; if the call fails or `GEMINI_API_KEY` is unset, the label is left blank rather than blocking the save.

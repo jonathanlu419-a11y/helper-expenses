@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { geminiGenerate, geminiKey } from "@/lib/gemini";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
-
-const MODEL = "claude-opus-4-8";
 
 const SYSTEM =
   "You translate short English labels for a household grocery / expense tracker " +
@@ -15,8 +13,7 @@ const SYSTEM =
 // POST { text } → { label_id: string|null }. Never throws; null on any failure so
 // category saving is never blocked (Mum can fill the Indonesian label manually).
 export async function POST(req: Request) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return NextResponse.json({ label_id: null, unavailable: true });
+  if (!geminiKey()) return NextResponse.json({ label_id: null, unavailable: true });
 
   let body: unknown;
   try {
@@ -30,19 +27,15 @@ export async function POST(req: Request) {
   }
 
   try {
-    const client = new Anthropic({ apiKey });
-    const msg = await client.messages.create({
-      model: MODEL,
-      max_tokens: 60,
+    const out = await geminiGenerate({
       system: SYSTEM,
-      messages: [
+      parts: [
         {
-          role: "user",
-          content: `Translate to concise, natural everyday Bahasa Indonesia (household/grocery context): "${text.trim()}"`,
+          text: `Translate to concise, natural everyday Bahasa Indonesia (household/grocery context): "${text.trim()}"`,
         },
       ],
+      maxOutputTokens: 60,
     });
-    const out = msg.content.find((b) => b.type === "text")?.text ?? "";
     const label = out.trim().replace(/^["'`]+|["'`.]+$/g, "").trim();
     return NextResponse.json({ label_id: label || null });
   } catch (err) {

@@ -103,7 +103,7 @@ export interface VisionResult {
   unavailable?: boolean;
 }
 
-/** Whether the camera Quick Add is configured (ANTHROPIC_API_KEY present). */
+/** Whether the camera Quick Add is configured (GEMINI_API_KEY present). */
 export async function visionEnabled(): Promise<boolean> {
   try {
     const res = await fetch("/api/vision", { cache: "no-store" });

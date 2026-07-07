@@ -1,15 +1,13 @@
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { geminiGenerate, geminiKey } from "@/lib/gemini";
 import { query } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // vision calls can take a few seconds
 
-// Per the claude-api reference: default to claude-opus-4-8 unless a model is
-// explicitly chosen. Vision + base64 image input, JSON-only prompt, parsed
-// defensively so an unreadable photo falls back to blank rather than erroring.
-// The category list is read from the DB so it always matches Mum's categories.
-const MODEL = "claude-opus-4-8";
+// Gemini vision + inline image data, JSON-only prompt, parsed defensively so an
+// unreadable photo falls back to blank rather than erroring. The category list
+// is read from the DB so it always matches Mum's categories.
 
 const ALLOWED_MEDIA = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
@@ -48,13 +46,12 @@ function parseVision(text: string, validKeys: Set<string>): VisionResult {
 
 // GET → is the feature configured? (used to show/hide the camera button)
 export async function GET() {
-  return NextResponse.json({ enabled: Boolean(process.env.ANTHROPIC_API_KEY) });
+  return NextResponse.json({ enabled: Boolean(geminiKey()) });
 }
 
 // POST { image: base64, media_type } → { amount, category, note }
 export async function POST(req: Request) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return NextResponse.json(blank(true));
+  if (!geminiKey()) return NextResponse.json(blank(true));
 
   let body: unknown;
   try {
@@ -98,30 +95,15 @@ ${catList}
 
 Return ONLY: {"amount": number|null, "category": string|null, "confidence_note": string}`;
 
-    const client = new Anthropic({ apiKey });
-    const msg = await client.messages.create({
-      model: MODEL,
-      max_tokens: 300,
+    const text = await geminiGenerate({
       system: SYSTEM,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: media_type as "image/jpeg" | "image/png" | "image/webp" | "image/gif",
-                data: image,
-              },
-            },
-            { type: "text", text: prompt },
-          ],
-        },
+      parts: [
+        { inline_data: { mime_type: media_type, data: image } },
+        { text: prompt },
       ],
+      maxOutputTokens: 300,
     });
 
-    const text = msg.content.find((b) => b.type === "text")?.text ?? "";
     return NextResponse.json(parseVision(text, validKeys));
   } catch (err) {
     console.error("POST /api/vision failed:", err);
