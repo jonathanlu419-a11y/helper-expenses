@@ -1,131 +1,94 @@
 # Helper Expenses
 
-A tiny two-page household spending tracker.
+A full-stack household expense tracker with two purpose-built UIs (a localized quick-entry screen and an analytics dashboard) sharing one data model, built to explore a handful of deceptively tricky problems: timezone-correct date bucketing, a cash-float accounting model, AI-assisted data entry, and admin-configurable domain data replacing what started as hardcoded enums.
 
-- **`/worker`** — Bahasa Indonesia quick-entry screen for the domestic helper. A floating **+** button opens a 2-step sheet (pick category → enter amount), and every entry is listed in a table that can be edited or deleted. The Quick Add sheet also has a **📷 Ambil Foto** option: the helper photographs a receipt or a price-tagged item, and **Gemini vision** prefills the category and amount for her to review (never auto-saved). If the price can't be read confidently (unit price only, blurry, missing), the amount is left blank for manual entry.
-- **`/mum`** — English dashboard for the employer. Toggle **Weekly / Monthly**, step through periods, and see per-category totals (with bars), a grand total, and the entries. Mum can also add (its own English **+** button), edit, and delete entries.
-- **`/mum/calendar`** — month-view calendar (linked from the dashboard sub-nav). Each day cell shows that day's totals rolled up into **3 big categories** — Food / Transport / Household — with prev/next month navigation and a tap-to-expand day detail. The roll-up is view-only; the underlying 7-category data is unchanged.
-
-Both pages read from and manage the **same** `expenses` table via the same API.
-
-Built with **Next.js (App Router) + TypeScript + Tailwind + Postgres** (standard `pg` driver, Neon serverless Postgres — free tier, runs indefinitely).
+**Stack:** Next.js 14 (App Router) · TypeScript · Tailwind · Postgres (Neon serverless, plain `pg` driver, parameterized SQL — no ORM) · Google Gemini (`gemini-2.5-flash`) for vision extraction and translation, called via a small raw-`fetch` wrapper rather than an SDK.
 
 ---
 
-## Categories (fixed, 7)
+## What it does
 
-| Internal key | Indonesian (worker) | English (Mum) | Emoji |
-|---|---|---|---|
-| `household_cleaning` | Kebutuhan Rumah Tangga | Household & Cleaning Supplies | 🧹 |
-| `vegetables` | Sayuran | Vegetables | 🥬 |
-| `fruits` | Buah-buahan | Fruits | 🍎 |
-| `meat` | Daging | Meat | 🥩 |
-| `rice_noodles` | Beras & Mie | Rice & Noodles | 🍚 |
-| `other_food` | Bahan Makanan Lain | Other Food Items | 🧂 |
-| `transport` | Transportasi | Transportation | 🚗 |
+Two views over one `expenses` table (plus a cash ledger and admin-managed categories):
 
-Amounts display with a plain `$` prefix and 2 decimals.
+- **A localized quick-entry screen** — a 2-step "pick category → enter amount" flow behind a floating action button, entirely in Bahasa Indonesia, designed for fast one-handed entry with minimal friction. Includes a camera capture mode: photograph a receipt or a price tag and a vision model prefills the category and amount for review before saving.
+- **An analytics dashboard** — an English view over the same data: weekly/monthly period toggling, per-category totals with bars, a running cash-float balance, a month calendar with a roll-up view, and full CRUD over entries and categories.
+
+The two views intentionally have zero cross-links — each surfaces only what its audience needs — which is a small but real UX-architecture decision, not an oversight (see [Notes / decisions](#notes--decisions)).
+
+---
+
+## Interesting problems solved
+
+### 1. Timezone-correct date bucketing
+The app runs on Vercel (UTC server clock) but every date boundary — "today," week/month ranges, the calendar grid — needs to reflect the household's *local* calendar day, not UTC. A naive `new Date()` at 11pm local time can silently roll over to UTC-tomorrow and file an entry into the wrong day, week, or month.
+
+The fix, in [`src/lib/time.ts`](src/lib/time.ts): derive *only* today's local calendar date via `date-fns-tz`, then do all subsequent arithmetic on a **noon-anchored** plain `Date` — noon avoids any DST-adjacent midnight edge cases — so period math (`getPeriodRange`, `getMonthGrid`) is pure, deterministic, and never timezone-sensitive again after that first conversion.
+
+### 2. A cash-float accounting model
+The tracker isn't just a spending log — it models a running cash float held by one party on another's behalf:
+
+```
+balance = opening_balance
+        + Σ(cash given)
+        − Σ(cash collected)
+        − Σ(expenses)
+```
+
+implemented once in [`src/lib/balance.ts`](src/lib/balance.ts) and never re-derived client-side — every surface (entry list, dashboard, calendar) reads through the same function. The schema encodes the same invariant as a comment in [`db/schema.sql`](db/schema.sql) so the business rule is documented at both the code and data layer.
+
+### 3. Admin-configurable categories (migrating off a hardcoded enum)
+Categories started as a fixed, `CHECK`-constrained enum on the `expenses.category` column. As the tracker's real-world domain grew (categories needed renaming, reordering, and grouping without a code deploy), that was migrated to two DB-backed tables — `categories` and `big_categories` — with:
+
+- soft-delete for categories that already have entries (so history stays intact) vs. hard-delete for unused ones,
+- a non-deletable fallback "big category" that in-use categories reassign to when their group is removed,
+- a migration that moved the original enum values into rows **preserving their keys**, so existing `expenses` rows were never orphaned.
+
+Every UI surface reads categories from `GET /api/categories` — there's no compiled-in category list left anywhere in the frontend.
+
+### 4. AI-assisted data entry, with a hard requirement to never guess
+Two Gemini integrations ([`src/lib/gemini.ts`](src/lib/gemini.ts)), both designed around "the model must never silently fabricate a number that gets saved":
+
+- **Vision extraction** (`/api/vision`): a receipt or price-tag photo → `{amount, category, confidence_note}` JSON. The prompt explicitly instructs the model to return `null` for amount rather than guess when a price is a unit price, blurry, or ambiguous — the UI then prefills what it *can* read and leaves the rest for manual entry. Nothing is ever auto-submitted.
+- **Category-label translation** (`/api/translate`): suggests a natural (not literal/dictionary) Bahasa Indonesia label for an English category name, which an admin reviews and edits before saving.
+
+Both routes fail closed: a missing API key, a network error, or a malformed response returns a safe blank/`unavailable` result rather than blocking the write path — the AI call is always an enhancement, never a dependency.
+
+One real bug worth noting: `gemini-2.5-flash` has "thinking" on by default, and thinking tokens count against `maxOutputTokens` — for short structured-output tasks this was silently eating the entire budget and truncating real answers (e.g. "Health & Medicine" coming back as just `"K"`). Fixed by disabling `thinkingConfig.thinkingBudget` for these deterministic, low-latency tasks.
+
+---
+
+## Architecture notes
+
+- **No ORM** — direct parameterized `pg` queries. At this scale (a handful of tables, no complex joins beyond the category FK) an ORM would add indirection without buying much; the schema itself ([`db/schema.sql`](db/schema.sql)) is the single source of truth, applied via an idempotent `db:setup` script.
+- **One data-fetching hook** (`useLedger`) is the single source for expenses, cash transactions, categories, and settings — every page derives its view (period filters, calendar roll-ups, balance) from that one client-side cache rather than each component fetching independently.
+- **Server routes never trust client-supplied enums** — category keys are validated against the live DB list on write, not against a compiled constant, so the check can't drift from what's actually configurable.
+- **Deliberate UI segmentation** — the two front-of-house views share components (`ExpenseSheet`, `DayGroupedEntries`) parameterized by a `lang` prop rather than being fully separate implementations, while the navigation between them is intentionally *not* cross-linked.
 
 ---
 
 ## Local setup
 
-1. **Install dependencies**
+```bash
+npm install
+cp .env.example .env.local   # fill in DATABASE_URL (and optionally GEMINI_API_KEY)
+npm run db:setup             # applies db/schema.sql
+npm run dev
+```
 
-   ```bash
-   npm install
-   ```
-
-2. **Create a Neon Postgres database** — either via the Vercel dashboard (**Storage → Create Database → Neon**, which attaches it to the project) or directly at [neon.tech](https://neon.tech). Copy its **pooled** connection string (host contains `-pooler`).
-
-3. **Configure env**
-
-   ```bash
-   cp .env.example .env.local
-   ```
-
-   Paste the pooled Neon connection string into `.env.local` as `DATABASE_URL`. SSL is handled automatically for remote hosts.
-
-4. **Apply the schema**
-
-   ```bash
-   npm run db:setup
-   ```
-
-   This runs [`db/schema.sql`](db/schema.sql) against `DATABASE_URL`.
-
-5. **Run**
-
-   ```bash
-   npm run dev
-   ```
-
-   Open http://localhost:3000 → links to `/worker` and `/mum`.
-
----
+Optional sample data: `npm run seed` populates a few weeks of synthetic expenses/cash movements across all categories so the dashboard and calendar aren't empty on first run.
 
 ## Environment variables
 
-Only one is required:
-
 | Variable | Required | Notes |
 |---|---|---|
-| `DATABASE_URL` | ✅ | Neon **pooled** connection string. Used by the app (`pg`) and by `npm run db:setup`. Note: the Vercel↔Neon integration also injects prefixed vars (e.g. `helper_expenses_tracking_DATABASE_URL`), but the app reads the plain `DATABASE_URL` — set that explicitly. |
-| `GEMINI_API_KEY` | ⬜ optional | Enables the **📷 camera Quick Add** on `/worker` (Gemini vision) **and** auto-translation of category labels (English → Indonesian) in Manage Categories. If unset, the camera button is hidden and the Indonesian label is left blank for manual entry. Server-side only. Get a key at [Google AI Studio](https://aistudio.google.com/apikey). |
-
----
-
-## Deploy to Vercel
-
-1. Push this repo to a **new** GitHub repository.
-2. In Vercel, **Add New → Project** and import that repo (a brand-new Vercel project — unrelated to any existing project).
-3. In the project's **Settings → Environment Variables**, ensure the plain `DATABASE_URL` = your Neon **pooled** connection string, for Production (and Preview/Development). If you attached Neon via the Vercel integration, it creates *prefixed* vars — add the plain `DATABASE_URL` yourself so the app picks it up.
-4. Deploy.
-5. **Apply the schema once** against Neon — run it locally against the same URL:
-   ```bash
-   # with DATABASE_URL set in .env.local (the pooled Neon URL)
-   npm run db:setup
-   ```
-   …or paste the contents of [`db/schema.sql`](db/schema.sql) into the Neon SQL editor.
-
-The table is created with `IF NOT EXISTS`, so re-running the setup is safe.
-
-> **Deploy identity note:** on Vercel's Hobby plan, deployments from a **private** repo are only allowed when the deployed commit's author maps to the account that owns the Vercel project. Commits in this repo are authored with the GitHub noreply address `284824704+jonathanlu419-a11y@users.noreply.github.com` (set via repo-local `git config user.email`) so private-repo deploys aren't blocked.
-
----
-
-## Data model
-
-Categories are **Mum-managed** and stored in the DB (`categories` + `big_categories` tables), not hardcoded — see [`db/schema.sql`](db/schema.sql). Every category rolls up into exactly one big category (FK, not-null); a permanent `other`/"Lainnya" fallback big category can't be deleted. Removing a category that has entries soft-deletes it (hidden from Quick Add, still shown in history); one with no entries is hard-deleted. All UI reads categories from `GET /api/categories`, so edits reflect everywhere immediately.
-
-Core `expenses` table — see [`db/schema.sql`](db/schema.sql):
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | `BIGSERIAL` PK | |
-| `category` | `TEXT` | one of the 7 keys (CHECK-constrained) |
-| `amount` | `NUMERIC(12,2)` | `>= 0` |
-| `entry_date` | `DATE` | defaults to `CURRENT_DATE`; the app sends Hong Kong "today" |
-| `note` | `TEXT` | nullable, not surfaced in the entry UI (shown if present) |
-| `created_at` | `TIMESTAMPTZ` | auto |
-
-## API
-
-| Method | Route | Purpose |
-|---|---|---|
-| `GET` | `/api/expenses` | List all entries, newest first |
-| `POST` | `/api/expenses` | Create `{ category, amount, entry_date?, note? }` |
-| `PATCH` | `/api/expenses/:id` | Update any subset of fields |
-| `DELETE` | `/api/expenses/:id` | Delete one entry |
+| `DATABASE_URL` | ✅ | Postgres connection string (developed against Neon's pooled endpoint). |
+| `GEMINI_API_KEY` | ⬜ optional | Enables the camera quick-add (vision) and category-label auto-translation. Both features degrade gracefully — hidden/blank, not broken — if unset. Get a key at [Google AI Studio](https://aistudio.google.com/apikey). |
 
 ---
 
 ## Notes / decisions
 
-- **Timezone: everything is anchored to `Asia/Hong_Kong`.** "Today" (the entry-date default), the Weekly/Monthly period boundaries, and the calendar month grid are computed from Hong Kong local time via `date-fns-tz` (see [`src/lib/time.ts`](src/lib/time.ts)), **not** the server's UTC clock — so a late-night entry lands in the right day/week/month.
-- **Week = Monday–Sunday.** Monthly = calendar month.
-- **No auth** — both routes are public (MVP). If you later want to deter random URL hits, add a lightweight PIN gate.
-- **No currency logic** — amounts are plain numbers shown with a `$` prefix.
-- The `note` field exists in the schema/API but has no input in the entry UI for the MVP; if a note is present it's shown under the category.
-- **Camera Quick Add (vision):** uses Google's `gemini-2.5-flash` (Generative Language REST API, via a raw `fetch` wrapper in [`src/lib/gemini.ts`](src/lib/gemini.ts) — no SDK dependency) in the `/api/vision` route. The photo is **downscaled in the browser, sent for one-shot extraction, and never stored** — not in the database, not in any file/blob storage — to keep infra simple and avoid privacy/storage concerns. The model is prompted to return `{amount, category, confidence_note}` as JSON and is instructed to return `amount: null` rather than guess when the price isn't clearly readable; the route parses defensively and falls back to a blank form on any failure.
-- **Category label auto-translation** also uses `gemini-2.5-flash` (same `src/lib/gemini.ts` helper) in the `/api/translate` route — Mum always reviews/edits the suggested Indonesian label before saving; if the call fails or `GEMINI_API_KEY` is unset, the label is left blank rather than blocking the save.
+- **Timezone anchor is configurable in one place** (`APP_TZ` in [`src/lib/time.ts`](src/lib/time.ts)) — the deployed instance targets a specific timezone for its household, but nothing else in the codebase hardcodes that assumption.
+- **Localization is structural, not just string-swapping** — the quick-entry screen's copy, date formatting (explicit day/month name arrays rather than relying on runtime `Intl` locale data), and even the browser tab title are all localized independently per view.
+- **No auth** — this is a demo/portfolio deployment scope; a real multi-tenant version would need it before going further.
+- Photos taken for the vision feature are processed in-memory for extraction only — never persisted to disk, database, or blob storage.
