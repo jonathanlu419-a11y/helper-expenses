@@ -15,6 +15,14 @@ Two views over one `expenses` table (plus a cash ledger and admin-managed catego
 
 The two views intentionally have zero cross-links — each surfaces only what its audience needs — which is a small but real UX-architecture decision, not an oversight (see [Notes / decisions](#notes--decisions)).
 
+<p>
+  <img src="docs/screenshots/worker.png" alt="Quick-entry screen (Bahasa Indonesia)" width="260">
+  <img src="docs/screenshots/mum-dashboard.png" alt="Analytics dashboard" width="420">
+</p>
+<p>
+  <img src="docs/screenshots/mum-calendar.png" alt="Month calendar with category roll-up" width="420">
+</p>
+
 ---
 
 ## Interesting problems solved
