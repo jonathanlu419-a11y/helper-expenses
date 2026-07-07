@@ -35,6 +35,10 @@ export async function geminiGenerate(opts: {
     contents: [{ role: "user", parts: opts.parts }],
     generationConfig: {
       maxOutputTokens: opts.maxOutputTokens ?? 256,
+      // 2.5 Flash "thinks" by default, and thinking tokens count against
+      // maxOutputTokens — for short structured extraction/translation tasks
+      // that can consume the whole budget and truncate the real answer.
+      thinkingConfig: { thinkingBudget: 0 },
       ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
     },
   };
