@@ -74,36 +74,41 @@ export default function QuickAddSheet({
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40" onClick={onClose}>
       <div
-        className="animate-sheet-up w-full max-w-md rounded-t-3xl bg-white p-5 pb-8 shadow-2xl"
+        className="animate-sheet-up flex max-h-[88vh] w-full max-w-md flex-col rounded-t-3xl bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-gray-300" />
+        {/* Header + Expense/Cash toggle stay pinned so they're always visible,
+            even if the fields below need to scroll on a short mobile viewport. */}
+        <div className="shrink-0 px-5 pt-5">
+          <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-gray-300" />
 
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold">Quick Add</h2>
-          <button onClick={onClose} className="rounded-full px-3 py-1 text-sm text-gray-500">
-            Close
-          </button>
-        </div>
-
-        {/* Expense / Cash tabs */}
-        <div className="mb-4 flex rounded-full bg-gray-200 p-1">
-          {(["expense", "cash"] as const).map((k) => (
-            <button
-              key={k}
-              onClick={() => {
-                setTab(k);
-                setError(null);
-              }}
-              className={`flex-1 rounded-full py-2 text-sm font-semibold capitalize transition ${
-                tab === k ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
-              }`}
-            >
-              {k === "expense" ? "Expense" : "Cash"}
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-bold">Quick Add</h2>
+            <button onClick={onClose} className="rounded-full px-3 py-1 text-sm text-gray-500">
+              Close
             </button>
-          ))}
+          </div>
+
+          {/* Expense / Cash tabs */}
+          <div className="mb-4 flex rounded-full bg-gray-200 p-1">
+            {(["expense", "cash"] as const).map((k) => (
+              <button
+                key={k}
+                onClick={() => {
+                  setTab(k);
+                  setError(null);
+                }}
+                className={`min-h-11 flex-1 rounded-full py-2 text-sm font-semibold capitalize transition ${
+                  tab === k ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
+                }`}
+              >
+                {k === "expense" ? "Expense" : "Cash"}
+              </button>
+            ))}
+          </div>
         </div>
 
+        <div className="overflow-y-auto px-5 pb-8">
         {tab === "expense" ? (
           <div>
             <p className="mb-2 text-sm text-gray-500">Category</p>
@@ -206,6 +211,7 @@ export default function QuickAddSheet({
         >
           {saving ? "Saving…" : "Save"}
         </button>
+        </div>
       </div>
     </div>
   );
