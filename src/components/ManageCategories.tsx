@@ -578,17 +578,21 @@ function Sheet({
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
       <div
-        className="animate-sheet-up w-full max-w-md rounded-t-3xl bg-white p-5 pb-8 shadow-2xl"
+        className="animate-sheet-up flex max-h-[88vh] w-full max-w-md flex-col rounded-t-3xl bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-gray-300" />
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold">{title}</h2>
-          <button onClick={onClose} className="rounded-full px-3 py-1 text-sm text-gray-500">
-            Close
-          </button>
+        {/* Header stays pinned so title/close are always visible, even if the
+            fields below need to scroll on a short mobile viewport. */}
+        <div className="shrink-0 px-5 pt-5">
+          <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-gray-300" />
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-bold">{title}</h2>
+            <button onClick={onClose} className="rounded-full px-3 py-1 text-sm text-gray-500">
+              Close
+            </button>
+          </div>
         </div>
-        {children}
+        <div className="overflow-y-auto px-5 pb-8">{children}</div>
       </div>
     </div>
   );
