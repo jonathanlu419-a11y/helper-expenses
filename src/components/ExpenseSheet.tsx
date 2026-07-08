@@ -9,6 +9,11 @@ import { analyzePhoto, visionEnabled } from "@/lib/client";
 
 export type Lang = "id" | "en";
 
+// Temporarily disabled: hides the "Ambil Foto" camera quick-add button (and
+// its "atau pilih sendiri:" divider) without touching the underlying vision
+// logic. Flip back to true to re-enable.
+const CAMERA_QUICK_ADD_ENABLED = false;
+
 // Bottom sheet used on both pages for adding and editing an expense.
 // Copy switches on `lang`: "id" (Bahasa Indonesia, worker) or "en" (Mum).
 //
@@ -218,7 +223,7 @@ export default function ExpenseSheet({
         {/* Step 1: choose a category (with optional camera prefill) */}
         {step === 1 && (
           <div>
-            {mode === "add" && cameraOn && (
+            {CAMERA_QUICK_ADD_ENABLED && mode === "add" && cameraOn && (
               <div className="mb-4">
                 <button
                   onClick={() => fileRef.current?.click()}
