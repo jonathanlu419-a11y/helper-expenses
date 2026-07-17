@@ -91,6 +91,7 @@ Optional sample data: `npm run seed` populates a few weeks of synthetic expenses
 |---|---|---|
 | `DATABASE_URL` | ✅ | Postgres connection string (developed against Neon's pooled endpoint). |
 | `GEMINI_API_KEY` | ⬜ optional | Enables the camera quick-add (vision) and category-label auto-translation. Both features degrade gracefully — hidden/blank, not broken — if unset. Get a key at [Google AI Studio](https://aistudio.google.com/apikey). |
+| `ADMIN_PASSWORD` | ⬜ optional | Gates `/admin` (see below). Without it, `/admin`'s login always fails (503) — `/mum` and `/worker` are unaffected either way. |
 
 ---
 
@@ -98,5 +99,5 @@ Optional sample data: `npm run seed` populates a few weeks of synthetic expenses
 
 - **Timezone anchor is configurable in one place** (`APP_TZ` in [`src/lib/time.ts`](src/lib/time.ts)) — the deployed instance targets a specific timezone for its household, but nothing else in the codebase hardcodes that assumption.
 - **Localization is structural, not just string-swapping** — the quick-entry screen's copy, date formatting (explicit day/month name arrays rather than relying on runtime `Intl` locale data), and even the browser tab title are all localized independently per view.
-- **No auth** — this is a demo/portfolio deployment scope; a real multi-tenant version would need it before going further.
+- **`/admin` is a password-gated mirror of `/mum`** — same dashboard component (`src/components/dashboard/*View.tsx`), same data, reached via a signed httpOnly cookie set by `/api/admin/login` after a correct `ADMIN_PASSWORD`. This gates the *page*, not the underlying data API — `/api/expenses`, `/api/cash`, `/api/settings`, and `/api/categories` are intentionally left public, since `/mum` and `/worker` both depend on them staying that way. `/admin` doesn't add confidentiality beyond what `/mum` already exposes; it exists as a distinct, harder-to-stumble-onto URL, not a real access-control boundary. A genuinely private deployment would need auth on the data layer itself, which is out of scope here.
 - Photos taken for the vision feature are processed in-memory for extraction only — never persisted to disk, database, or blob storage.
