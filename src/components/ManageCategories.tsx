@@ -159,7 +159,7 @@ export default function ManageCategories({
               <button
                 onClick={() => setEditor({ kind: "big", mode: "edit", big: b })}
                 disabled={busy}
-                className="rounded-full px-2 py-1 text-xs text-blue-600"
+                className="inline-flex min-h-11 items-center rounded-full px-2 text-xs text-blue-600"
               >
                 Edit
               </button>
@@ -167,7 +167,7 @@ export default function ManageCategories({
                 <button
                   onClick={() => removeBig(b)}
                   disabled={busy}
-                  className="rounded-full px-2 py-1 text-xs text-red-500"
+                  className="inline-flex min-h-11 items-center rounded-full px-2 text-xs text-red-500"
                 >
                   Delete
                 </button>
@@ -218,7 +218,7 @@ export default function ManageCategories({
               <button
                 onClick={() => setEditor({ kind: "category", mode: "edit", cat: c })}
                 disabled={busy}
-                className="rounded-full px-2 py-1 text-xs text-blue-600"
+                className="inline-flex min-h-11 items-center rounded-full px-2 text-xs text-blue-600"
               >
                 Edit
               </button>
@@ -226,7 +226,7 @@ export default function ManageCategories({
                 <button
                   onClick={() => removeCategory(c)}
                   disabled={busy}
-                  className="rounded-full px-2 py-1 text-xs text-red-500"
+                  className="inline-flex min-h-11 items-center rounded-full px-2 text-xs text-red-500"
                 >
                   Remove
                 </button>
@@ -237,7 +237,7 @@ export default function ManageCategories({
                     await reload();
                   })}
                   disabled={busy}
-                  className="rounded-full px-2 py-1 text-xs text-emerald-600"
+                  className="inline-flex min-h-11 items-center rounded-full px-2 text-xs text-emerald-600"
                 >
                   Show
                 </button>
@@ -298,11 +298,11 @@ function ReorderButtons({
   disabled: boolean;
 }) {
   return (
-    <span className="flex flex-col leading-none">
+    <span className="flex flex-col">
       <button
         onClick={onUp}
         disabled={disabled || first}
-        className="px-1 text-xs text-gray-400 disabled:opacity-20"
+        className="flex min-h-11 min-w-11 items-center justify-center text-xs text-gray-400 disabled:opacity-20"
         aria-label="Move up"
       >
         ▲
@@ -310,7 +310,7 @@ function ReorderButtons({
       <button
         onClick={onDown}
         disabled={disabled || last}
-        className="px-1 text-xs text-gray-400 disabled:opacity-20"
+        className="flex min-h-11 min-w-11 items-center justify-center text-xs text-gray-400 disabled:opacity-20"
         aria-label="Move down"
       >
         ▼
@@ -587,7 +587,7 @@ function Sheet({
           <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-gray-300" />
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-bold">{title}</h2>
-            <button onClick={onClose} className="rounded-full px-3 py-1 text-sm text-gray-500">
+            <button onClick={onClose} className="inline-flex min-h-11 items-center rounded-full px-3 text-sm text-gray-500">
               Close
             </button>
           </div>

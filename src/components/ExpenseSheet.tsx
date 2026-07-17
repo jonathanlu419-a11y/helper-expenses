@@ -206,7 +206,7 @@ export default function ExpenseSheet({
             <h2 className="text-lg font-bold">{title}</h2>
             <button
               onClick={onClose}
-              className="rounded-full px-3 py-1 text-sm text-gray-500"
+              className="inline-flex min-h-11 items-center rounded-full px-3 text-sm text-gray-500"
               aria-label={t.close}
             >
               {t.close}

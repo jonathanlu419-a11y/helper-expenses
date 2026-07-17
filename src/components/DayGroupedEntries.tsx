@@ -155,7 +155,7 @@ function ExpenseRow({
       <td className="px-1 py-3 text-right">
         <button
           onClick={() => onDelete(exp)}
-          className="rounded-full px-2 py-1 text-gray-300 hover:text-red-500"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full text-gray-300 hover:text-red-500"
           aria-label="delete"
         >
           🗑️
@@ -194,7 +194,7 @@ function CashRow({
         {onDelete && (
           <button
             onClick={() => onDelete(cash)}
-            className="rounded-full px-2 py-1 text-gray-300 hover:text-red-500"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full text-gray-300 hover:text-red-500"
             aria-label="delete cash"
           >
             🗑️

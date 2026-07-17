@@ -20,7 +20,7 @@ export default function MumTabs({ active }: { active: MumTab }) {
         t.key === active ? (
           <span
             key={t.key}
-            className="rounded-full bg-slate-800 px-3 py-1 text-sm font-medium text-white"
+            className="inline-flex min-h-11 items-center rounded-full bg-slate-800 px-3 text-sm font-medium text-white"
           >
             {t.label}
           </span>
@@ -28,7 +28,7 @@ export default function MumTabs({ active }: { active: MumTab }) {
           <Link
             key={t.key}
             href={t.href}
-            className="rounded-full bg-gray-200 px-3 py-1 text-sm font-medium text-gray-600"
+            className="inline-flex min-h-11 items-center rounded-full bg-gray-200 px-3 text-sm font-medium text-gray-600"
           >
             {t.label}
           </Link>

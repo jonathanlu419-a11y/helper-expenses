@@ -84,7 +84,7 @@ export default function QuickAddSheet({
 
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-bold">Quick Add</h2>
-            <button onClick={onClose} className="rounded-full px-3 py-1 text-sm text-gray-500">
+            <button onClick={onClose} className="inline-flex min-h-11 items-center rounded-full px-3 text-sm text-gray-500">
               Close
             </button>
           </div>
