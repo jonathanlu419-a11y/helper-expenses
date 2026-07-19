@@ -1,13 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
-import { formatMoney, formatDateShort } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import type { ExpenseInput, CashInput } from "@/lib/types";
 import { useLedger } from "@/lib/useLedger";
 import { getPeriodRange, isWithin, type Period } from "@/lib/time";
 import MumTabs from "@/components/MumTabs";
-import BalanceCard from "@/components/BalanceCard";
 import QuickAddSheet from "@/components/QuickAddSheet";
 import Toast, { type ToastState } from "@/components/Toast";
 
@@ -16,12 +14,10 @@ import Toast, { type ToastState } from "@/components/Toast";
 export default function MumSummaryView({ basePath }: { basePath: string }) {
   const {
     expenses,
-    cash,
     settings,
     categories,
     activeCategories,
     categoryMap,
-    balance,
     loading,
     error,
     addExpense,
@@ -62,18 +58,6 @@ export default function MumSummaryView({ basePath }: { basePath: string }) {
     [breakdownCats, totals]
   );
 
-  // 3 most recent activities (expenses + cash mixed), newest first.
-  const recent = useMemo(() => {
-    const items = [
-      ...expenses.map((e) => ({ kind: "expense" as const, date: e.entry_date, ts: e.created_at, e })),
-      ...cash.map((c) => ({ kind: "cash" as const, date: c.entry_date, ts: c.created_at, c })),
-    ].sort((a, b) => {
-      if (a.date !== b.date) return a.date < b.date ? 1 : -1;
-      return b.ts < a.ts ? -1 : 1;
-    });
-    return items.slice(0, 3);
-  }, [expenses, cash]);
-
   async function handleAddExpense(input: ExpenseInput) {
     await addExpense(input);
     setToast({ message: "Saved.", kind: "success" });
@@ -98,52 +82,6 @@ export default function MumSummaryView({ basePath }: { basePath: string }) {
         <p className="py-16 text-center text-sm text-red-600">Failed to load data.</p>
       ) : (
         <>
-          <BalanceCard balance={balance} lang="en" />
-
-          {/* Recent Activity preview */}
-          <div className="mb-5 mt-3 rounded-2xl bg-white p-4 shadow-sm">
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-700">Recent Activity</h2>
-              <Link href={`${basePath}/entries`} className="text-xs font-medium text-blue-600">
-                See all →
-              </Link>
-            </div>
-            {recent.length === 0 ? (
-              <p className="py-3 text-center text-sm text-gray-400">No activity yet.</p>
-            ) : (
-              <ul className="divide-y divide-gray-50">
-                {recent.map((item) =>
-                  item.kind === "expense" ? (
-                    <li key={`e${item.e.id}`} className="flex items-center justify-between py-2">
-                      <span className="text-sm text-gray-700">
-                        <span className="mr-1">{categoryMap[item.e.category]?.emoji}</span>
-                        {categoryMap[item.e.category]?.labelEn ?? item.e.category}
-                      </span>
-                      <span className="flex items-center gap-3">
-                        <span className="text-xs text-gray-400">{formatDateShort(item.date)}</span>
-                        <span className="text-sm font-semibold">{formatMoney(item.e.amount)}</span>
-                      </span>
-                    </li>
-                  ) : (
-                    <li key={`c${item.c.id}`} className="flex items-center justify-between py-2">
-                      <span className={`text-sm font-medium ${item.c.type === "given" ? "text-emerald-700" : "text-amber-700"}`}>
-                        <span className="mr-1">{item.c.type === "given" ? "💰" : "🔄"}</span>
-                        {item.c.type === "given" ? "Cash from Mum" : "Cash back to Mum"}
-                      </span>
-                      <span className="flex items-center gap-3">
-                        <span className="text-xs text-gray-400">{formatDateShort(item.date)}</span>
-                        <span className={`text-sm font-semibold ${item.c.type === "given" ? "text-emerald-700" : "text-amber-700"}`}>
-                          {item.c.type === "given" ? "+" : "−"}
-                          {formatMoney(item.c.amount)}
-                        </span>
-                      </span>
-                    </li>
-                  )
-                )}
-              </ul>
-            )}
-          </div>
-
           {/* Weekly / Monthly toggle */}
           <div className="mb-4 flex rounded-full bg-gray-200 p-1">
             {(["weekly", "monthly"] as Period[]).map((p) => (
