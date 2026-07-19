@@ -7,13 +7,18 @@ import { getPeriodRange, isWithin, todayISO, type Period } from "@/lib/time";
 import MumTabs from "@/components/MumTabs";
 
 // Shared Overview dashboard, mounted at both /mum (public) and /admin
-// (password-gated) — see MumTabs for the basePath convention. Presents the
-// period's spend as a single gradient hero total plus a category-breakdown
-// list, where each row's bar is that category's share of the period total.
+// (password-gated) — see MumTabs for the basePath convention. The hero shows
+// the current cash-left balance (mirroring BalanceCard's sign convention and
+// copy); below it, a period-spend summary line and a category-breakdown list
+// where each row's bar is that category's share of the period total.
 export default function MumOverviewView({ basePath }: { basePath: string }) {
-  const { expenses, categoryMap, loading, error } = useLedger();
+  const { expenses, categoryMap, balance, loading, error } = useLedger();
   const [period, setPeriod] = useState<Period>("monthly");
   const [offset, setOffset] = useState(0);
+
+  // Same sign convention as BalanceCard: positive (>= 0) = the helper is
+  // holding Mum's money; negative = the helper is out of pocket.
+  const positive = balance >= 0;
 
   function changePeriod(p: Period) {
     setPeriod(p);
@@ -56,17 +61,28 @@ export default function MumOverviewView({ basePath }: { basePath: string }) {
         <p className="py-16 text-center text-sm text-red-600">Failed to load data.</p>
       ) : (
         <>
-          {/* Hero total card */}
-          <div className="mb-5 rounded-3xl bg-gradient-to-br from-orange-500 via-orange-500 to-rose-600 p-6 text-white shadow-sm">
+          {/* Hero: current cash-left balance. Gradient flips on sign so a
+              negative (out-of-pocket) balance reads as a warning. */}
+          <div
+            className={`mb-5 rounded-3xl bg-gradient-to-br p-6 text-white shadow-sm ${
+              positive
+                ? "from-orange-500 via-orange-500 to-rose-600"
+                : "from-rose-600 to-red-700"
+            }`}
+          >
             <div className="text-xs font-medium uppercase tracking-wide text-white/80">
-              Overview · {range.label}
+              Cash left
             </div>
-            <div className="mt-1 text-4xl font-bold">{formatMoney(grandTotal)}</div>
+            <div className="mt-1 text-4xl font-bold">
+              {positive ? "" : "−"}
+              {formatMoney(Math.abs(balance))}
+            </div>
             <div className="mt-1 text-sm text-white/80">{formatDayHeader(todayISO())}</div>
             <div className="my-4 h-px bg-white/20" />
             <div className="text-sm font-medium text-white/90">
-              {inRange.length} {inRange.length === 1 ? "entry" : "entries"} across{" "}
-              {breakdown.length} {breakdown.length === 1 ? "category" : "categories"}
+              {positive
+                ? "Positive = the helper is holding Mum's money."
+                : "Negative = the helper is out of pocket; Mum owes this back."}
             </div>
           </div>
 
@@ -115,7 +131,12 @@ export default function MumOverviewView({ basePath }: { basePath: string }) {
           {/* Category breakdown — each bar is the category's share of the
               period total (total ÷ grand total), sorted by spend. */}
           <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h2 className="mb-3 text-sm font-semibold text-gray-700">Category Breakdown</h2>
+            <h2 className="text-sm font-semibold text-gray-700">Category Breakdown</h2>
+            <p className="mb-3 mt-0.5 text-xs text-gray-400">
+              {range.label} · {formatMoney(grandTotal)} spent · {inRange.length}{" "}
+              {inRange.length === 1 ? "entry" : "entries"} across {breakdown.length}{" "}
+              {breakdown.length === 1 ? "category" : "categories"}
+            </p>
             {breakdown.length === 0 ? (
               <p className="py-6 text-center text-sm text-gray-400">
                 No spending in this period.

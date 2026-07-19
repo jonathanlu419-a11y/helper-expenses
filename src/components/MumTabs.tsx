@@ -7,8 +7,8 @@ import Link from "next/link";
 // area must not expose any path to the worker's screens.
 
 const TABS = [
-  { key: "summary", label: "Summary", path: "" },
   { key: "overview", label: "Overview", path: "/overview" },
+  { key: "summary", label: "Summary", path: "" },
   { key: "calendar", label: "Calendar", path: "/calendar" },
   { key: "entries", label: "Entries", path: "/entries" },
   { key: "settings", label: "Settings", path: "/settings" },
